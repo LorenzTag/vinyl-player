@@ -55,8 +55,8 @@ export function createMiniPlayer({ store, playback, onOpen }) {
 
   function tick() {
     const pb = store.get().playback;
-    const track = pb.tracks[pb.index];
-    if (!track) return;
+    const track = pb.tracks[pb.index] ?? pb.track;
+    if (!track?.durationMs) return;
     const pos = pb.playing ? pb.positionMs + (Date.now() - pb.at) : pb.positionMs;
     fill.style.transform = `scaleX(${clamp(pos / track.durationMs, 0, 1).toFixed(4)})`;
   }
@@ -76,7 +76,7 @@ export function createMiniPlayer({ store, playback, onOpen }) {
       shownContext = context.id;
       thumb.replaceChildren(createCover(context));
     }
-    const track = pb.tracks[pb.index];
+    const track = pb.tracks[pb.index] ?? pb.track;
     title.textContent = track?.title ?? context.title;
     subtitle.textContent = track ? `${track.artists} · ${context.title}` : context.subtitle;
     openButton.setAttribute('aria-label', `Plattenspieler öffnen: ${title.textContent}`);

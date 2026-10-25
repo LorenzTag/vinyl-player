@@ -14,9 +14,9 @@ const EMPTY_TEXT = {
 };
 
 /**
- * @param {{ onRetry: () => void }} handlers
+ * @param {{ onRetry: () => void, onLogin?: () => void }} handlers
  */
-export function createStatus({ onRetry }) {
+export function createStatus({ onRetry, onLogin }) {
   const el = h('div', { class: 'status', hidden: true, role: 'status', 'aria-live': 'polite' });
 
   /** Zuletzt gezeigter Zustand – unverändert heißt: DOM nicht anfassen. */
@@ -50,7 +50,9 @@ export function createStatus({ onRetry }) {
       el.append(
         h('h2', { class: 'status__title' }, 'Die Sammlung ließ sich nicht laden'),
         h('p', { class: 'status__text' }, resource.error?.message ?? ''),
-        h('button', { type: 'button', class: 'button', onclick: onRetry }, 'Erneut versuchen'),
+        resource.error?.kind === 'auth' && onLogin
+          ? h('button', { type: 'button', class: 'button', onclick: onLogin }, 'Bei Spotify anmelden')
+          : h('button', { type: 'button', class: 'button', onclick: onRetry }, 'Erneut versuchen'),
       );
     } else {
       el.dataset.state = 'empty';

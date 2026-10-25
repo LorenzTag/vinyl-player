@@ -49,12 +49,14 @@ import { createStore } from './store.js';
  * @typedef {Object} Playback
  * @property {RecordItem | null} context   laufende Platte (auch pausiert) oder null
  * @property {Track[]} tracks              Titel der laufenden Platte
- * @property {number} index                aktueller Titel
+ * @property {number} index                aktueller Titel in `tracks`, -1 = nicht in der Liste
+ * @property {Track | null} track          aktueller Titel laut Gerät (auch ohne Titelliste)
  * @property {boolean} playing
  * @property {number} positionMs           Position zum Zeitpunkt `at`
  * @property {number} at                   Date.now() der Messung
  * @property {boolean} pending             ein Befehl ist unterwegs
  * @property {SourceError | null} error    letzter fehlgeschlagener Befehl
+ * @property {string | null} deviceName    Gerät, auf dem gespielt wird
  */
 
 /** @type {TabId[]} */
@@ -103,12 +105,14 @@ export function createAppStore() {
     playback: {
       context: null,
       tracks: [],
-      index: 0,
+      index: -1,
+      track: null,
       playing: false,
       positionMs: 0,
       at: Date.now(),
       pending: false,
       error: null,
+      deviceName: null,
     },
     tracklists: {},
   };

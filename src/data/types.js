@@ -55,6 +55,8 @@
  * @property {(opts?: RequestOptions) => Promise<RecordItem[]>} getAlbums
  * @property {(opts?: RequestOptions) => Promise<RecentItem[]>} getRecentlyPlayed
  * @property {(record: RecordItem, opts?: RequestOptions) => Promise<Track[]>} getTracks
+ * @property {(uri: string, opts?: RequestOptions) => Promise<RecordItem | null>} getRecord
+ *           Platte per URI nachschlagen (z. B. was gerade auf einem anderen Gerät läuft)
  */
 
 /**
@@ -62,10 +64,13 @@
  *
  * @typedef {Object} PlaybackSnapshot
  * @property {string | null} contextUri  laufende Platte (Album/Playlist) oder null
- * @property {number} index              Titel-Index innerhalb der Platte
+ * @property {number} index              Titel-Index innerhalb der Platte, -1 = unbekannt
+ *                                       (Spotify nennt keinen Index – er folgt aus `track.uri`)
+ * @property {Track | null} track        aktueller Titel (auch wenn er in keiner Liste steht)
  * @property {boolean} playing
  * @property {number} positionMs         Position im Titel zum Zeitpunkt `at`
  * @property {number} at                 Date.now() der Messung (zum Hochrechnen)
+ * @property {string | null} deviceName  Gerät, auf dem gerade gespielt wird
  */
 
 /**
@@ -74,6 +79,7 @@
  *
  * @typedef {Object} PlaybackDevice
  * @property {(cmd: { contextUri: string, index: number, positionMs?: number, tracks: Track[] }) => Promise<void>} play
+ *           `tracks` darf leer sein (z. B. fremde Playlist) – dann zählt nur `index`.
  * @property {() => Promise<void>} pause
  * @property {() => Promise<void>} resume
  * @property {() => Promise<void>} next

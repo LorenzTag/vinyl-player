@@ -20,7 +20,7 @@ const RESTART_AFTER_MS = 3000; // „Zurück" nach 3 s: Titel neu starten statt 
  */
 export function createMockDevice(mode = '') {
   /** @type {PlaybackSnapshot} */
-  let state = { contextUri: null, index: 0, playing: false, positionMs: 0, at: Date.now() };
+  let state = { contextUri: null, index: 0, track: null, playing: false, positionMs: 0, at: Date.now(), deviceName: 'Demo-Plattenspieler' };
   /** @type {Track[]} */
   let tracks = [];
   let endTimer = 0;
@@ -37,6 +37,7 @@ export function createMockDevice(mode = '') {
   /** @param {Partial<PlaybackSnapshot>} patch */
   function set(patch) {
     state = { ...state, ...patch, at: Date.now() };
+    state.track = state.contextUri ? tracks[state.index] ?? null : null;
     clearTimeout(endTimer);
     const track = tracks[state.index];
     if (state.playing && track) {

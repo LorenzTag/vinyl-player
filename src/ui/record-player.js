@@ -170,7 +170,17 @@ export function createRecordPlayer({ store, playback, onRequestClose }) {
   let shownError = null;
 
   /** Was gerade dargestellt wird – für Ticker und Gesten */
-  let view = { isCurrent: false, playing: false, tracks: /** @type {import('../data/types.js').Track[]} */ ([]), index: -1 };
+  let view = {
+    isCurrent: false,
+    playing: false,
+    tracks: /** @type {import('../data/types.js').Track[]} */ ([]),
+    index: -1,
+    /** @type {import('../data/types.js').Track | null} */
+    track: null,
+    count: 0,
+  };
+  /** Wo die Nadel zuletzt aufgelegt wurde – Lage des Arms, wenn Spotify keinen Index nennt */
+  let armFraction = 0;
 
   /** Selbst gestartete, noch laufende Animationen */
   /** @type {Set<Animation>} */
@@ -246,9 +256,11 @@ export function createRecordPlayer({ store, playback, onRequestClose }) {
     next.append(svg(ICONS.next));
     listButton.append(svg(ICONS.list));
 
+    // Spotify-App eingefroren / kein Gerät: App öffnen, danach wird der Befehl wiederholt.
+    const wake = h('a', { class: 'player__wake', href: 'spotify:', hidden: true }, 'Spotify öffnen');
     const bar = h('div', { class: 'player__bar' },
       back,
-      h('div', { class: 'player__now' }, title, subtitle, status),
+      h('div', { class: 'player__now' }, title, subtitle, h('div', { class: 'player__status-row' }, status, wake)),
       h('div', { class: 'player__controls' }, prev, toggle, next, listButton),
       progress,
     );
@@ -274,7 +286,7 @@ export function createRecordPlayer({ store, playback, onRequestClose }) {
 
     return {
       record: recordEl, disc, sleeve, platter, tonearm, deck, stage, bar, backdrop, hint,
-      title, subtitle, status, progress, progressFill, toggle, prev, next, tracklist, toast,
+      title, subtitle, status, wake, progress, progressFill, toggle, prev, next, tracklist, toast,
       spin: createSpin(spinEl),
     };
   }
@@ -301,11 +313,10 @@ export function createRecordPlayer({ store, playback, onRequestClose }) {
 
   /** Fortschritt über die ganze Platte (0…1) – bestimmt die Lage des Tonarms. */
   function recordProgress(/** @type {AppState['playback']} */ pb) {
-    const n = view.tracks.length;
-    if (!view.isCurrent || !n) return 0;
-    const track = view.tracks[view.index];
-    const within = track ? clamp(positionMs(pb) / track.durationMs, 0, 1) : 0;
-    return (view.index + within) / n;
+    if (!view.isCurrent || !view.count) return 0;
+    if (view.index < 0) return armFraction; // Titel steht in keiner Liste
+    const within = view.track?.durationMs ? clamp(positionMs(pb) / view.track.durationMs, 0, 1) : 0;
+    return (view.index + within) / view.count;
   }
 
   /** @param {AppState} state */
@@ -318,9 +329,10 @@ export function createRecordPlayer({ store, playback, onRequestClose }) {
     const list = state.tracklists[record.id];
     const tracks = isCurrent ? pb.tracks : list?.items ?? [];
     const index = isCurrent ? pb.index : -1;
-    const track = isCurrent ? tracks[index] : undefined;
+    const track = isCurrent ? tracks[index] ?? pb.track : null;
     const playing = isCurrent && pb.playing;
-    view = { isCurrent, playing, tracks, index };
+    const count = tracks.length || record.trackCount;
+    view = { isCurrent, playing, tracks, index, track, count };
 
     // Tonarm und Teller. Solange ein Befehl unterwegs ist, bleibt der Arm, wo
     // die Hand ihn hingelegt hat; danach folgt er dem tatsächlichen Zustand.
@@ -330,13 +342,15 @@ export function createRecordPlayer({ store, playback, onRequestClose }) {
     // Leiste
     current.title.textContent = track ? track.title : record.title;
     current.subtitle.textContent = track ? `${track.artists} · ${record.title}` : `${record.subtitle} · ${metaLine(item)}`;
+    const where = pb.deviceName ? ` · ${pb.deviceName}` : '';
     current.status.textContent = pb.pending
       ? 'Einen Moment …'
       : isCurrent
-        ? `${playing ? 'Titel' : 'Pausiert · Titel'} ${index + 1} von ${tracks.length}`
+        ? `${playing ? '' : 'Pausiert · '}${index >= 0 ? `Titel ${index + 1} von ${tracks.length}` : 'Läuft'}${where}`
         : pb.context
           ? `Läuft gerade: ${pb.context.title}`
           : 'Tonarm auf die Platte ziehen';
+    current.wake.hidden = pb.error?.kind !== 'no-device';
     current.toggle.replaceChildren(svg(playing ? ICONS.pause : ICONS.play));
     current.toggle.setAttribute('aria-label', playing ? 'Pause' : 'Abspielen');
     current.prev.disabled = !isCurrent;
@@ -363,9 +377,10 @@ export function createRecordPlayer({ store, playback, onRequestClose }) {
   function tick() {
     if (!current) return;
     const pb = store.get().playback;
-    const track = view.isCurrent ? view.tracks[view.index] : undefined;
-    if (!track) {
+    const track = view.isCurrent ? view.track : null;
+    if (!track?.durationMs) {
       current.progressFill.style.transform = 'scaleX(0)';
+      delete current.status.dataset.time;
       return;
     }
     const pos = clamp(positionMs(pb), 0, track.durationMs);
@@ -389,14 +404,14 @@ export function createRecordPlayer({ store, playback, onRequestClose }) {
   function showArmHint(/** @type {number | null} */ fraction) {
     if (!current) return;
     const { hint } = current;
-    const n = view.tracks.length || store.get().tracklists[current.item.record.id]?.items.length || 0;
+    const tracks = view.tracks.length ? view.tracks : store.get().tracklists[current.item.record.id]?.items ?? [];
+    const n = tracks.length || current.item.record.trackCount;
     if (fraction === null || !n) {
       hint.classList.remove('is-visible');
       return;
     }
-    const tracks = view.tracks.length ? view.tracks : store.get().tracklists[current.item.record.id]?.items ?? [];
     const index = Math.min(n - 1, Math.floor(fraction * n));
-    hint.textContent = `${index + 1} · ${tracks[index]?.title ?? ''}`;
+    hint.textContent = tracks[index] ? `${index + 1} · ${tracks[index].title}` : `Titel ${index + 1} von ${n}`;
     hint.classList.add('is-visible');
   }
 
@@ -419,7 +434,8 @@ export function createRecordPlayer({ store, playback, onRequestClose }) {
       else playback.playRecord(record, 0);
       return;
     }
-    const n = view.tracks.length || store.get().tracklists[record.id]?.items.length || 1;
+    const n = view.tracks.length || store.get().tracklists[record.id]?.items.length || record.trackCount || 1;
+    armFraction = fraction;
     playback.dropNeedle(record, Math.min(n - 1, Math.floor(fraction * n)));
   }
 

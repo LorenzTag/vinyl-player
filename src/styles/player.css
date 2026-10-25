@@ -443,6 +443,33 @@
   font-variant-numeric: tabular-nums;
 }
 
+.player__status-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+/* „Spotify öffnen", wenn kein Gerät bereit ist */
+.player__wake {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  margin-top: 3px;
+  padding: 0 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #0b0b0b;
+  text-decoration: none;
+  background: #1ed760;
+}
+
+.player__wake[hidden] {
+  display: none;
+}
+
 .player__bar.has-progress .player__status[data-time]::after {
   content: "  ·  " attr(data-time);
   color: var(--text-faint);

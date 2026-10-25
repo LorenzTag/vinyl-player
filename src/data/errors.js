@@ -3,7 +3,7 @@
 // `kind` und `retryable`, was sie anzeigt – nie anhand von HTTP-Details.
 
 /**
- * @typedef {'network' | 'timeout' | 'auth' | 'rate-limit' | 'no-device' | 'premium-required' | 'unknown'} SourceErrorKind
+ * @typedef {'network' | 'timeout' | 'auth' | 'rate-limit' | 'no-device' | 'premium-required' | 'forbidden' | 'not-found' | 'unknown'} SourceErrorKind
  */
 
 /** @type {Record<SourceErrorKind, string>} */
@@ -12,8 +12,10 @@ const MESSAGES = {
   timeout: 'Spotify antwortet gerade nicht.',
   auth: 'Bitte erneut bei Spotify anmelden.',
   'rate-limit': 'Zu viele Anfragen – kurz warten.',
-  'no-device': 'Kein aktives Spotify-Gerät gefunden.',
+  'no-device': 'Spotify ist auf diesem Gerät nicht bereit. Öffne kurz die Spotify-App.',
   'premium-required': 'Die Steuerung erfordert Spotify Premium.',
+  forbidden: 'Spotify verweigert den Zugriff.',
+  'not-found': 'Bei Spotify nicht gefunden.',
   unknown: 'Da ist etwas schiefgegangen.',
 };
 

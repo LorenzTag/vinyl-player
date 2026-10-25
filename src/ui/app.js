@@ -31,9 +31,11 @@ const HISTORY_FALLBACK_MS = 600;
  *   store: AppStore,
  *   library: { load: (tab: TabId, opts?: { force?: boolean }) => Promise<void> },
  *   playback: PlaybackController,
+ *   account?: HTMLElement,
+ *   onLogin?: () => void,
  * }} deps
  */
-export function createApp(root, { store, library, playback }) {
+export function createApp(root, { store, library, playback, account, onLogin }) {
   const initial = store.get();
 
   // ---------- Kopfleiste ----------
@@ -73,11 +75,15 @@ export function createApp(root, { store, library, playback }) {
     ),
   );
 
-  const topbar = h('header', { class: 'topbar' }, brand, tabs.el, layoutSwitch.el);
+  const topbar = h('header', { class: 'topbar' },
+    brand,
+    tabs.el,
+    h('div', { class: 'topbar__end' }, layoutSwitch.el, account ?? null),
+  );
 
   // ---------- Bühne ----------
 
-  const status = createStatus({ onRetry: () => library.load(store.get().tab, { force: true }) });
+  const status = createStatus({ onRetry: () => library.load(store.get().tab, { force: true }), onLogin });
   const stage = h('main', { class: 'stage', id: 'collection', role: 'tabpanel' }, status.el);
   const mini = createMiniPlayer({ store, playback, onOpen });
   const menu = h('div', { class: 'menu' }, topbar, stage, mini.el);

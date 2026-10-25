@@ -175,5 +175,10 @@ export function createMockSource(mode = '') {
     getTracks(record, opts) {
       return respond(`tracks:${record.id}`, () => tracksFor(record), opts);
     },
+
+    async getRecord(uri) {
+      const record = [...PLAYLISTS, ...ALBUMS].find((r) => r.uri === uri);
+      return record ? { ...record } : null;
+    },
   };
 }
