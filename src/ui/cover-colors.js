@@ -10,7 +10,11 @@ import { coverPalette } from './cover-art.js';
 import { hashString } from '../lib/seeded.js';
 
 /** @typedef {import('../data/types.js').RecordItem} RecordItem */
-/** @typedef {{ bg: string, a: string, b: string, ink: string }} Palette */
+/** @typedef {{ bg: string, ink: string }} Tone  Fläche + lesbare Schrift darauf */
+/**
+ * @typedef {{ bg: string, a: string, b: string, ink: string, left?: Tone, right?: Tone }} Palette
+ * left/right: Farbe an der linken/rechten Cover-Kante (für die Hüllen-Rücken)
+ */
 /** @typedef {[number, number, number]} RGB */
 
 /** @param {string} hex @returns {RGB} */
@@ -199,8 +203,49 @@ async function readPalette(url) {
     vivid.sort((x, y) => y.score - x.score);
     const a = hex(vivid[0].c);
     const b = hex(vivid[Math.min(vivid.length - 1, Math.floor(vivid.length * 0.15))].c);
-    return { bg, a, b, ink: luminance(bg) > 0.35 ? '#2a2018' : '#f6ead2' };
+    const edge = Math.max(2, Math.round(size / 8));
+    return {
+      bg, a, b,
+      ink: luminance(bg) > 0.35 ? '#2a2018' : '#f6ead2',
+      left: tone(dominant(data, size, 0, edge)),
+      right: tone(dominant(data, size, size - edge, size)),
+    };
   } catch {
     return null;
   }
+}
+
+/**
+ * Häufigste Farbe in einem senkrechten Streifen (Spalten from…to-1) – wie das
+ * Cover an dieser Kante aussieht. Gruppiert grob nach Farbton, damit es eine
+ * klare Farbe wird statt eines Mittelwerts aus allem.
+ * @param {Uint8ClampedArray} data
+ * @param {number} size
+ * @param {number} from
+ * @param {number} to
+ */
+function dominant(data, size, from, to) {
+  /** @type {Map<number, { n: number, sum: RGB }>} */
+  const groups = new Map();
+  let best = null;
+  for (let y = 0; y < size; y++) {
+    for (let x = from; x < to; x++) {
+      const i = (y * size + x) * 4;
+      const key = ((data[i] >> 5) << 6) | ((data[i + 1] >> 5) << 3) | (data[i + 2] >> 5);
+      let group = groups.get(key);
+      if (!group) groups.set(key, (group = { n: 0, sum: [0, 0, 0] }));
+      group.n++;
+      group.sum[0] += data[i];
+      group.sum[1] += data[i + 1];
+      group.sum[2] += data[i + 2];
+      if (!best || group.n > best.n) best = group;
+    }
+  }
+  const { n, sum } = /** @type {{ n: number, sum: RGB }} */ (best);
+  return hex([sum[0] / n, sum[1] / n, sum[2] / n]);
+}
+
+/** @param {string} bg @returns {Tone} */
+function tone(bg) {
+  return { bg, ink: luminance(bg) > 0.3 ? '#1f1812' : '#f6ead2' };
 }

@@ -2,6 +2,10 @@
    zeigen ihren Rücken (Titel + Ersteller). Die 3D-Lage jeder Hülle setzt JS per
    transform; animiert wird nur transform und opacity. */
 
+/* Rücken-Farbe kommt aus dem Cover; registriert, damit sie weich überblendet. */
+@property --spine-bg { syntax: "<color>"; inherits: false; initial-value: #2b231d; }
+@property --spine-ink { syntax: "<color>"; inherits: false; initial-value: #e8dcc6; }
+
 .crate {
   position: relative;
   height: 100%;
@@ -9,7 +13,7 @@
   display: grid;
   grid-template-rows: minmax(0, 1fr) auto;
   --size: min(42cqw, calc(100cqh - 88px), 440px);
-  --spine: calc(var(--size) * 0.085);  /* Dicke des Hüllen-Rückens */
+  --spine: max(18px, calc(var(--size) * 0.048));  /* Dicke des Hüllen-Rückens */
 }
 
 .crate__probe {
@@ -78,11 +82,12 @@
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  color: var(--spine-ink, #2a2018);
+  color: var(--spine-ink);
   background:
-    linear-gradient(90deg, rgb(0 0 0 / 0.22), transparent 28%, transparent 72%, rgb(0 0 0 / 0.28)),
-    linear-gradient(180deg, rgb(255 255 255 / 0.12), transparent 18%, transparent 82%, rgb(0 0 0 / 0.18)),
-    var(--spine-bg, #e9dfcc);
+    linear-gradient(90deg, rgb(0 0 0 / 0.2), transparent 30%, transparent 70%, rgb(0 0 0 / 0.24)),
+    linear-gradient(180deg, rgb(255 255 255 / 0.1), transparent 18%, transparent 82%, rgb(0 0 0 / 0.16)),
+    var(--spine-bg);
+  transition: --spine-bg 420ms linear, --spine-ink 420ms linear;
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
 }
@@ -110,20 +115,19 @@
   transform: rotate(180deg);
   white-space: nowrap;
   text-overflow: ellipsis;
-  font-size: calc(var(--spine) * 0.42);
+  font-family: var(--font-sans);
+  font-size: calc(var(--spine) * 0.62);
   line-height: 1;
 }
 
 .crate-item__spine-text strong {
-  font-family: var(--font-serif);
   font-weight: 700;
 }
 
 .crate-item__spine-text span {
-  margin-inline-start: 0.8em;   /* senkrechte Schrift: „inline" läuft entlang des Rückens */
-  font-size: 0.86em;
-  font-weight: 600;
-  opacity: 0.75;
+  margin-inline-start: 0.6em;   /* senkrechte Schrift: „inline" läuft entlang des Rückens */
+  font-weight: 500;
+  opacity: 0.78;
 }
 
 .crate-item.is-opening {

@@ -20,6 +20,8 @@ import { accessibleName, metaLine } from './format.js';
 /** @typedef {import('../data/types.js').RecordItem} RecordItem */
 /** @typedef {import('./view-types.js').View} View */
 /** @typedef {import('./view-types.js').OpenHandler} OpenHandler */
+/** @typedef {import('./cover-colors.js').Palette} Palette */
+/** @typedef {import('./cover-colors.js').Tone} Tone */
 
 const SLOT = 0.24;        // Abstand benachbarter Hüllen im Stapel (× Hüllengröße)
 const PUSH = 0.44;        // Lücke links/rechts der mittleren Hülle (× Hüllengröße)
@@ -41,33 +43,41 @@ const MAX_VELOCITY = 28;  // Platten/s – deckelt Ausreißer bei der Schwungber
  */
 
 /**
- * Farben des Hüllen-Rückens (wie die Grundfarbe des Covers).
- * @param {HTMLElement} el
- * @param {{ bg: string, ink: string }} palette
+ * Farbe eines Hüllen-Rückens.
+ * @param {HTMLElement} spine
+ * @param {Tone} tone
  */
-function paintSpine(el, palette) {
-  el.style.setProperty('--spine-bg', palette.bg);
-  el.style.setProperty('--spine-ink', palette.ink);
+function paintSpine(spine, tone) {
+  spine.style.setProperty('--spine-bg', tone.bg);
+  spine.style.setProperty('--spine-ink', tone.ink);
 }
 
 /**
+ * Die Rücken setzen das Cover fort: jeder nimmt die Farbe der angrenzenden
+ * Cover-Kante an.
  * @param {RecordItem} record
- * @param {HTMLElement} el
+ * @param {HTMLElement} left
+ * @param {HTMLElement} right
  */
-function colorSpine(record, el) {
+function colorSpines(record, left, right) {
+  /** @param {Palette} palette */
+  const paint = (palette) => {
+    paintSpine(left, palette.left ?? palette);
+    paintSpine(right, palette.right ?? palette);
+  };
   if (!record.imageUrl) {
-    paintSpine(el, coverPalette(record));
+    paint(coverPalette(record));
     return;
   }
   const known = cachedPalette(record.imageUrl);
   if (known) {
-    paintSpine(el, known);
+    paint(known);
     return;
   }
-  // Bis die echten Farben gelesen sind: Karton-Ton.
-  paintSpine(el, { bg: '#e9dfcc', ink: '#2a2018' });
+  // Bis die echten Farben gelesen sind, bleibt der Rücken dunkel (CSS-Vorgabe)
+  // und blendet dann in die Cover-Farbe über.
   paletteFromImage(record.imageUrl).then((palette) => {
-    if (palette) paintSpine(el, palette);
+    if (palette) paint(palette);
   });
 }
 
@@ -382,18 +392,16 @@ export function createCrateView({ onOpen }) {
         const face = h('div', { class: 'crate-item__face' }, createCover(record), shade);
         const spineText = () => h('span', { class: 'crate-item__spine-text' },
           h('strong', {}, record.title), h('span', {}, record.subtitle));
+        const left = h('div', { class: 'crate-item__spine crate-item__spine--left', 'aria-hidden': 'true' }, spineText());
+        const right = h('div', { class: 'crate-item__spine crate-item__spine--right', 'aria-hidden': 'true' }, spineText());
         const el = h('button', {
           type: 'button',
           class: 'crate-item',
           'aria-label': accessibleName(record),
           dataset: { key: item.key },
           style: { display: 'none' },
-        },
-          face,
-          h('div', { class: 'crate-item__spine crate-item__spine--left', 'aria-hidden': 'true' }, spineText()),
-          h('div', { class: 'crate-item__spine crate-item__spine--right', 'aria-hidden': 'true' }, spineText()),
-        );
-        colorSpine(record, el);
+        }, face, left, right);
+        colorSpines(record, left, right);
         return { item, el, shade, z: 0 };
       });
       stage.replaceChildren(...entries.map((e) => e.el));
