@@ -4,9 +4,10 @@ Web-App für das iPad, die deine Spotify-Bibliothek als Plattensammlung zeigt un
 später die Spotify-App per **Spotify Connect** steuert. Sie spielt selbst keinen
 Ton ab und läuft als Homescreen-App (PWA) im Vollbild.
 
-**Stand: Schritt 1 – Menü.** Die Daten sind noch Mock-Daten (je 12 Playlists und
-Alben, 8 „Zuletzt gehört"). Ein Tipp auf eine Hülle zieht die Platte heraus und
-zeigt einen Platzhalter für den Player aus Schritt 2.
+**Stand: Menü und Plattenspieler, noch ohne Spotify.** Die Daten sind Mock-Daten
+(je 12 Playlists und Alben, 8 „Zuletzt gehört", Titellisten). Ein simuliertes
+Abspielgerät verhält sich wie Spotify Connect: Es verwaltet Titel, Fortschritt
+und Pause und springt am Titelende weiter. Ton gibt es noch keinen.
 
 ## Starten
 
@@ -48,6 +49,7 @@ Fehlerfälle lassen sich per URL-Parameter simulieren:
 | `?mock=error` | jede Anfrage scheitert, nach 2 automatischen Versuchen kommt die Fehleranzeige |
 | `?mock=flaky` | erster Versuch scheitert, die automatische Wiederholung klappt    |
 | `?mock=empty` | leere Bibliothek                                                  |
+| `?mock=nodevice` | Abspielen scheitert mit „kein aktives Gerät" (Tonarm geht zurück) |
 
 ## Bedienung
 
@@ -57,10 +59,21 @@ Fehlerfälle lassen sich per URL-Parameter simulieren:
 - **Stapel:** wischen, mit Schwung, die Hüllen rasten ein. Eine seitliche Hülle
   antippen holt sie in die Mitte, die mittlere antippen öffnet sie.
   Am Mac gehen auch Pfeiltasten, Trackpad und Mausrad.
-- **Plattenteller:** Den Tonarm auf die Platte ziehen startet die Wiedergabe,
-  herunterziehen stoppt sie. Antippen des Arms oder der Play/Stopp-Knopf in der
-  Leiste schalten ebenfalls um. Echten Ton gibt es erst mit Spotify (Schritt 2).
-- **Zurück:** Button, Escape oder die Zurück-Geste des Browsers
+- **Plattenspieler:** Hintergrund, Vinyl (farbig, marmoriert) und Etikett nehmen
+  die Farben des Covers an.
+  - **Tonarm auf die Platte ziehen** startet die Wiedergabe, herunterziehen
+    pausiert. Wo die Nadel landet, bestimmt den Titel, wie bei echtem Vinyl. Beim
+    Ziehen zeigt ein Hinweis, welcher Titel unter der Nadel liegt. Während der
+    Wiedergabe wandert der Arm langsam nach innen. Antippen schaltet ebenfalls um.
+  - **Nach links/rechts wischen:** nächster/vorheriger Titel. „Zurück“ startet
+    nach 3 Sekunden zuerst den laufenden Titel neu.
+  - **Platte zur Hülle ziehen:** Die Platte wird eingepackt, die Wiedergabe endet,
+    und du bist zurück in der Sammlung.
+  - **Leiste:** „Sammlung“ geht zurück, die Musik läuft dabei weiter. Außerdem
+    ⏮ ▶/❚❚ ⏭ und die **Titelliste** (Beiblatt). Ein Titel antippen spielt genau diesen.
+- **Mini-Player:** Läuft eine Platte, schwebt in der Sammlung unten ein
+  Mini-Player mit Pause und Weiter. Ein Tipp darauf öffnet den Plattenspieler wieder.
+- **Zurück:** „Sammlung“-Button, Escape oder die Zurück-Geste des Browsers
 
 ## Aufbau
 
@@ -75,17 +88,25 @@ src/
     types.js            eigene Datentypen (unabhängig vom Spotify-JSON)
     errors.js           einheitliche Fehler (Netz, Timeout, 429, kein Gerät …)
     source.js           wählt die Datenquelle ← hier kommt in Schritt 2 Spotify rein
-    mock-source.js      Mock-Daten inkl. simulierter Fehler
+    mock-source.js      Mock-Daten inkl. Titellisten und simulierter Fehler
+  playback/             Abspielgerät
+    device.js           wählt das Gerät ← hier kommt in Schritt 2 Spotify Connect rein
+    mock-device.js      simuliertes Gerät (Titel, Fortschritt, Pause, Weiter)
   state/                Zustand
     store.js            minimaler Store (set/subscribe)
     app-state.js        Form des Zustands, gemerkte Einstellungen
     library.js          Laden mit Abbruch, automatischen Wiederholungen, „wieder online"
+    playback.js         Wiedergabe-Befehle (nacheinander), Titellisten-Cache, Fehler
   ui/                   Oberfläche (kennt nur Zustand und Domänen-Typen)
     app.js              Kopfleiste, Ansichten, Öffnen/Schließen, History
     crate-view.js       Stapel (Cover-Flow), eigene Wischgeste
     shelf-view.js       Regal
-    record-player.js    Hülle → Platte gleitet heraus → Platzhalter-Player
+    record-player.js    Plattenspieler: Animation, Gesten, Leiste
+    tonearm.js          Tonarm (Ziehen, Titelwahl, Fortschritt)
+    tracklist.js        Titelliste als Beiblatt
+    mini-player.js      Mini-Player in der Sammlung
     cover-art.js        echtes Cover oder generiertes Platzhalter-Cover
+    cover-colors.js     Farben für Hintergrund und Vinyl aus dem Cover
     …
   styles/               tokens, Texturen (CSS + SVG-Rauschen), je Ansicht ein File
 tools/make-icons.py     erzeugt die PNG-Icons ohne Abhängigkeiten

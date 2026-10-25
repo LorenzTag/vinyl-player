@@ -17,19 +17,21 @@
   display: none;
 }
 
+/* Hintergrund in den Farben des Covers (Variablen setzt cover-colors.js) */
 .player-layer__backdrop {
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(ellipse 60% 55% at 62% 42%, rgb(255 214 160 / 0.1), transparent 70%),
-    radial-gradient(ellipse 130% 100% at 50% 45%, transparent 40%, rgb(0 0 0 / 0.6)),
+    radial-gradient(ellipse 55% 50% at 28% 38%, var(--theme-glow-a, rgb(255 214 160 / 0.1)), transparent 72%),
+    radial-gradient(ellipse 50% 45% at 72% 60%, var(--theme-glow-b, transparent), transparent 72%),
+    radial-gradient(ellipse 130% 100% at 50% 45%, transparent 40%, rgb(0 0 0 / 0.55)),
     var(--tex-grain),
-    linear-gradient(180deg, var(--walnut-800), var(--walnut-950));
-  background-size: auto, auto, 180px 180px, auto;
+    linear-gradient(180deg, var(--theme-top, var(--walnut-800)), var(--theme-bottom, var(--walnut-950)));
+  background-size: auto, auto, auto, 180px 180px, auto;
 }
 
 .player {
-  --S: min(calc((100cqw - 2 * var(--gutter)) / 2.3), calc(100cqh - 300px), 520px);
+  --S: min(calc((100cqw - 2 * var(--gutter)) / 2.42), calc((100cqh - 250px) / 1.32), 520px);
   --out-x: 1.02;
   --out-y: 0;
   position: absolute;
@@ -65,14 +67,15 @@
   position: relative;
   width: calc(var(--S) * 2.24);
   height: var(--S);
-  margin-top: calc(var(--S) * 0.22);                  /* Platz für das Gegengewicht */
+  /* Platz für das Gegengewicht oben und die vergrößerte, schräge Hülle */
+  margin: calc(var(--S) * 0.22) 0 calc(var(--S) * 0.08) calc(var(--S) * 0.12);
 }
 
 @media (orientation: portrait) {
   .player__deck {
     width: calc(var(--S) * 1.24);
     height: calc(var(--S) * 2.04);
-    margin-top: 0;
+    margin: calc(var(--S) * 0.06) 0 0 calc(var(--S) * 0.08);
   }
 }
 
@@ -99,7 +102,7 @@
 
 /* Schräglage – identisch zu tilt() in record-player.js */
 .record.is-tilted .record__sleeve {
-  transform: perspective(calc(var(--S) * 3.2)) translateX(calc(var(--S) * -0.04)) rotateY(18deg) rotateX(4deg) rotateZ(-5deg);
+  transform: perspective(calc(var(--S) * 3.2)) rotateY(18deg) rotateX(4deg) rotateZ(-5deg) scale(1.12);
 }
 
 .record__disc {
@@ -115,6 +118,12 @@
 
 .record.is-out .record__disc {
   transform: translate(calc(var(--out-x) * var(--S)), calc(var(--out-y) * var(--S)));
+  touch-action: none;
+  cursor: grab;
+}
+
+.record__disc.is-dragging {
+  cursor: grabbing;
 }
 
 .record__spin {
@@ -122,16 +131,20 @@
   inset: 0;
   border-radius: 50%;
   /* Prozentwerte beziehen sich auf den Radius (closest-side) */
+  /* Farbiges Vinyl: Grundfarbe + Marmorierung aus dem Cover, darüber
+     halbtransparente Rillen – funktioniert mit jeder Farbe (auch Schwarz). */
   background:
-    radial-gradient(circle closest-side, transparent 0 95.5%, #1c1916 96% 98.8%, #090807 99.4%),
+    radial-gradient(circle closest-side, transparent 0 95.5%, var(--vinyl-rim, #1c1916) 96% 98.8%, rgb(0 0 0 / 0.6) 99.4%),
     radial-gradient(circle closest-side,
-      transparent 0 57.6%, rgb(255 245 230 / 0.06) 58% 58.6%,
-      transparent 59% 70.4%, rgb(255 245 230 / 0.06) 70.8% 71.4%,
-      transparent 71.8% 83%, rgb(255 245 230 / 0.06) 83.4% 84%,
+      transparent 0 57.6%, rgb(255 245 230 / 0.08) 58% 58.6%,
+      transparent 59% 70.4%, rgb(255 245 230 / 0.08) 70.8% 71.4%,
+      transparent 71.8% 83%, rgb(255 245 230 / 0.08) 83.4% 84%,
       transparent 84.4%),
-    radial-gradient(circle closest-side, #0d0b0a 0 43%, #1a1715 43.4% 43.8%, #0d0b0a 44.2% 45%, transparent 45.4%),
-    repeating-radial-gradient(circle closest-side, #181513 0 0.5%, #0b0a09 0.5% 1.15%);
-  background-color: #0c0a09;
+    radial-gradient(circle closest-side, var(--vinyl-runout, #0d0b0a) 0 43%, rgb(255 255 255 / 0.08) 43.4% 43.8%, var(--vinyl-runout, #0d0b0a) 44.2% 45%, transparent 45.4%),
+    repeating-radial-gradient(circle closest-side, rgb(255 255 255 / 0.05) 0 0.5%, rgb(0 0 0 / 0.22) 0.5% 1.15%),
+    var(--vinyl-marble, none);
+  background-size: auto, auto, auto, auto, 100% 100%;
+  background-color: var(--vinyl, #0c0a09);
 }
 
 .record__label {
@@ -145,7 +158,7 @@
   container-type: inline-size;
   background:
     radial-gradient(circle closest-side, #050403 0 7%, transparent 7.6%),
-    radial-gradient(circle closest-side, transparent 0 88%, rgb(0 0 0 / 0.2) 89% 90.5%, transparent 91.5%),
+    radial-gradient(circle closest-side, transparent 0 86%, var(--label-ring, rgb(0 0 0 / 0.2)) 87% 89.5%, transparent 90.5%),
     var(--label-color, var(--brass-500));
   color: var(--label-ink, var(--ink-900));
   text-align: center;
@@ -272,6 +285,11 @@
   transition: none;
 }
 
+/* Während der Wiedergabe gleitet der Arm langsam nach innen */
+.tonearm__arm.is-tracking {
+  transition: transform 300ms linear;
+}
+
 .tonearm__weight {
   position: absolute;
   left: calc(var(--r) * -0.12);
@@ -346,18 +364,19 @@
 /* ---------- Leiste unten ---------- */
 
 .player__bar {
+  position: relative;
   justify-self: center;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 16px;
-  width: min(100%, 860px);
+  width: min(100%, 900px);
   margin-top: 12px;
-  padding: 10px 12px 10px 10px;
+  padding: 10px 12px 12px 10px;
   border-radius: 22px;
   background:
     var(--tex-grain),
-    linear-gradient(180deg, rgb(46 31 21 / 0.94), rgb(20 13 9 / 0.96));
+    linear-gradient(180deg, rgb(40 27 18 / 0.92), rgb(18 12 8 / 0.95));
   background-size: 180px 180px, auto;
   box-shadow:
     inset 0 1px 0 rgb(201 160 99 / 0.25),
@@ -369,7 +388,7 @@
   align-items: center;
   gap: 8px;
   min-height: 52px;
-  padding: 0 18px;
+  padding: 0 16px;
   border-radius: 14px;
   font-size: 16px;
   font-weight: 600;
@@ -379,8 +398,9 @@
 }
 
 .player__back:active,
-.player__toggle:active {
-  transform: scale(0.96);
+.player__toggle:active,
+.player__ctrl:active {
+  transform: scale(0.94);
 }
 
 .player__now {
@@ -412,18 +432,54 @@
 
 .player__status {
   margin-top: 3px;
+  overflow: hidden;
   font-size: 11.5px;
   font-weight: 700;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--brass-500);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-variant-numeric: tabular-nums;
+}
+
+.player__bar.has-progress .player__status[data-time]::after {
+  content: "  ·  " attr(data-time);
+  color: var(--text-faint);
+}
+
+.player__controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.player__ctrl {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  color: var(--text);
+  transition: transform var(--dur-fast) var(--ease-out), opacity var(--dur-fast) linear;
+}
+
+.player__ctrl:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.player__ctrl svg {
+  width: 24px;
+  height: 24px;
 }
 
 .player__toggle {
   display: grid;
   place-items: center;
-  width: 56px;
-  height: 56px;
+  width: 58px;
+  height: 58px;
+  margin: 0 2px;
   border-radius: 50%;
   color: var(--walnut-900);
   background: linear-gradient(180deg, var(--brass-400), var(--brass-500));
@@ -436,4 +492,101 @@
 .player__toggle svg {
   width: 26px;
   height: 26px;
+}
+
+/* Fortschritt des Titels: dünne Linie am unteren Rand der Leiste */
+.player__progress {
+  position: absolute;
+  left: 22px;
+  right: 22px;
+  bottom: 5px;
+  height: 3px;
+  border-radius: 2px;
+  overflow: hidden;
+  background: rgb(255 240 220 / 0.1);
+  opacity: 0;
+  transition: opacity var(--dur-med) linear;
+}
+
+.player__bar.has-progress .player__progress {
+  opacity: 1;
+}
+
+.player__progress-fill {
+  height: 100%;
+  background: var(--brass-500);
+  transform-origin: 0 50%;
+  transform: scaleX(0);
+  transition: transform 250ms linear;
+}
+
+@media (max-width: 760px) {
+  .player__back-label {
+    display: none;
+  }
+
+  .player__back {
+    padding: 0 14px;
+  }
+}
+
+/* ---------- Hinweise ---------- */
+
+/* Welcher Titel liegt unter der Nadel? (beim Ziehen des Tonarms) */
+.player__hint {
+  position: absolute;
+  top: 4px;
+  left: 50%;
+  max-width: min(80vw, 520px);
+  padding: 10px 18px;
+  border-radius: 999px;
+  overflow: hidden;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--walnut-900);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  background: linear-gradient(180deg, var(--paper-100), var(--paper-200));
+  box-shadow: 0 8px 22px -6px rgb(0 0 0 / 0.6);
+  opacity: 0;
+  transform: translate(-50%, -8px);
+  transition: opacity 160ms linear, transform 160ms var(--ease-out);
+  pointer-events: none;
+}
+
+.player__hint.is-visible {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+.player__stage {
+  position: relative;
+}
+
+/* Kurze Rückmeldungen (Titelwechsel, Fehler) */
+.player__toast {
+  position: absolute;
+  z-index: 5;
+  top: calc(var(--safe-top) + 16px);
+  left: 50%;
+  max-width: min(86vw, 560px);
+  padding: 11px 20px;
+  border-radius: 14px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+  text-align: center;
+  background: rgb(20 13 9 / 0.92);
+  box-shadow:
+    inset 0 0 0 1px rgb(201 160 99 / 0.3),
+    0 10px 26px -8px rgb(0 0 0 / 0.7);
+  opacity: 0;
+  transform: translate(-50%, -10px);
+  transition: opacity 180ms linear, transform 180ms var(--ease-out);
+  pointer-events: none;
+}
+
+.player__toast.is-visible {
+  opacity: 1;
+  transform: translate(-50%, 0);
 }

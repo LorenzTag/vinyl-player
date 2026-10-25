@@ -5,6 +5,7 @@
 // jedem Start gleich aus.
 
 import { h, svg } from './dom.js';
+import { hashString, seededRandom } from '../lib/seeded.js';
 
 /** @typedef {import('../data/types.js').RecordItem} RecordItem */
 
@@ -149,37 +150,6 @@ function n(v) {
   return Math.round(v * 100) / 100;
 }
 
-/** FNV-1a: stabiler 32-Bit-Hash einer Zeichenkette. */
-function hashString(str) {
-  let hash = 2166136261;
-  for (let i = 0; i < str.length; i++) {
-    hash ^= str.charCodeAt(i);
-    hash = Math.imul(hash, 16777619);
-  }
-  return hash >>> 0;
-}
-
-/** Kleiner deterministischer Zufallsgenerator (mulberry32). */
-function seededRandom(seed) {
-  let a = seed;
-  return () => {
-    a = (a + 0x6d2b79f5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-/** @param {string} hex */
-function luminance(hex) {
-  const v = parseInt(hex.slice(1), 16);
-  const [r, g, b] = [(v >> 16) & 255, (v >> 8) & 255, v & 255].map((c) => {
-    const s = c / 255;
-    return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
-  });
-  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
-}
-
 /** @param {RecordItem} record */
 function styleFor(record) {
   const hash = hashString(record.id);
@@ -191,12 +161,12 @@ function styleFor(record) {
 }
 
 /**
- * Farben für das Etikett der Schallplatte (passend zur Hülle).
+ * Farbpalette des generierten Covers (Grundlage für Platte und Hintergrund).
  * @param {RecordItem} record
+ * @returns {Palette}
  */
-export function labelColors(record) {
-  const { palette } = styleFor(record);
-  return { color: palette.a, ink: luminance(palette.a) > 0.35 ? '#2a2018' : '#f6ead2' };
+export function coverPalette(record) {
+  return styleFor(record).palette;
 }
 
 /**

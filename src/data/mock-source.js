@@ -8,8 +8,10 @@
 //   ?mock=empty  leere Bibliothek
 
 import { SourceError } from './errors.js';
+import { hashString, seededRandom } from '../lib/seeded.js';
 
 /** @typedef {import('./types.js').RecordItem} RecordItem */
+/** @typedef {import('./types.js').Track} Track */
 /** @typedef {import('./types.js').RecentItem} RecentItem */
 /** @typedef {import('./types.js').LibrarySource} LibrarySource */
 /** @typedef {import('./types.js').RequestOptions} RequestOptions */
@@ -72,6 +74,37 @@ function playlist(id, title, owner, trackCount) {
  */
 function album(id, title, artist, year, trackCount) {
   return { id, uri: `spotify:album:${id}`, kind: 'album', title, subtitle: artist, trackCount, year, imageUrl: null };
+}
+
+// Bausteine für erfundene Titel und Künstler der Playlists
+const WORDS_A = ['Silver', 'Midnight', 'Golden', 'Quiet', 'Electric', 'Paper', 'Velvet', 'Lonely', 'Summer', 'Northern',
+  'Slow', 'Blue', 'Hidden', 'Wild', 'Late', 'Copper', 'Gentle', 'Neon', 'Distant', 'Warm'];
+const WORDS_B = ['Rain', 'Harbor', 'Avenue', 'Letters', 'Lights', 'Ferry', 'Garden', 'Signal', 'Morning', 'Waltz',
+  'Motel', 'Tide', 'Radio', 'Season', 'Echo', 'Frontier', 'Window', 'River', 'Satellite', 'Parade'];
+const TITLES_DE = ['Letzte Ausfahrt', 'Fernweh', 'Nachtzug', 'Kleine Stadt', 'Sonntagslicht', 'Leuchtturm',
+  'Am Kanal', 'Sommerregen', 'Zwischen den Jahren', 'Funkstille', 'Kopfkino', 'Weites Land'];
+const PLAYLIST_ARTISTS = ['Die Laternen', 'Mara Lindqvist', 'The Elm Street Quartet', 'Kapelle Nordwind',
+  'Juno & The Wires', 'Odile Fontaine', 'Harbor Lights', 'Ilse Brandt Trio', 'Marcus Delane', 'Sundial',
+  'The Prairie Union', 'Lena Vogt', 'Moss & Ember', 'Fjord Radio'];
+
+/**
+ * Erfundene, aber stabile Titelliste für eine Platte.
+ * @param {RecordItem} record
+ * @returns {Track[]}
+ */
+function tracksFor(record) {
+  const random = seededRandom(hashString(`${record.id}:tracks`));
+  const pick = (/** @type {string[]} */ list) => list[Math.floor(random() * list.length)];
+  return Array.from({ length: record.trackCount }, (_, i) => {
+    const title = random() < 0.3 ? pick(TITLES_DE) : `${pick(WORDS_A)} ${pick(WORDS_B)}`;
+    return {
+      id: `${record.id}-t${i + 1}`,
+      uri: `spotify:track:${record.id}-t${i + 1}`,
+      title,
+      artists: record.kind === 'album' ? record.subtitle : pick(PLAYLIST_ARTISTS),
+      durationMs: Math.round((150 + random() * 180) * 1000),
+    };
+  });
 }
 
 /**
@@ -137,6 +170,10 @@ export function createMockSource(mode = '') {
           return record ? [{ record: { ...record }, playedAt: new Date(now - minutesAgo * 60_000).toISOString() }] : [];
         });
       }, opts);
+    },
+
+    getTracks(record, opts) {
+      return respond(`tracks:${record.id}`, () => tracksFor(record), opts);
     },
   };
 }

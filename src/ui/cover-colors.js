@@ -1,0 +1,128 @@
+// @ts-check
+// Farben des Plattenspieler-Bildschirms aus dem Cover: Hintergrund, Vinyl
+// (farbig, marmoriert) und Etikett.
+//
+// Generierte Cover liefern ihre Palette direkt. Für echte Cover (Spotify)
+// werden die Farben per Canvas aus dem Bild gelesen; klappt das nicht (z. B.
+// fehlende CORS-Freigabe), bleibt es bei der Palette des Platzhalters.
+
+import { coverPalette } from './cover-art.js';
+import { hashString } from '../lib/seeded.js';
+
+/** @typedef {import('../data/types.js').RecordItem} RecordItem */
+/** @typedef {{ bg: string, a: string, b: string, ink: string }} Palette */
+/** @typedef {[number, number, number]} RGB */
+
+/** @param {string} hex @returns {RGB} */
+function rgb(hex) {
+  const v = parseInt(hex.slice(1), 16);
+  return [(v >> 16) & 255, (v >> 8) & 255, v & 255];
+}
+
+/** @param {RGB} c */
+function hex([r, g, b]) {
+  return `#${[r, g, b].map((x) => Math.round(Math.max(0, Math.min(255, x))).toString(16).padStart(2, '0')).join('')}`;
+}
+
+/** @param {string} a @param {string} b @param {number} t  Anteil von b */
+function mix(a, b, t) {
+  const [x, y] = [rgb(a), rgb(b)];
+  return hex([x[0] + (y[0] - x[0]) * t, x[1] + (y[1] - x[1]) * t, x[2] + (y[2] - x[2]) * t]);
+}
+
+/** @param {string} c @param {number} alpha */
+function rgba(c, alpha) {
+  const [r, g, b] = rgb(c);
+  return `rgb(${r} ${g} ${b} / ${alpha})`;
+}
+
+/** relative Helligkeit 0…1 */
+function luminance(c) {
+  const [r, g, b] = rgb(c).map((v) => {
+    const s = v / 255;
+    return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+/** Marmorierung des Vinyls als SVG-Rauschen (selbst erzeugt, keine Bilddatei). */
+function marble(vinyl, seed) {
+  const dark = rgb(mix(vinyl, '#000000', 0.55)).map((v) => (v / 255).toFixed(3));
+  const light = rgb(mix(vinyl, '#ffffff', 0.45)).map((v) => (v / 255).toFixed(3));
+  const svg =
+    `<svg xmlns='http://www.w3.org/2000/svg' width='320' height='320'>` +
+    `<filter id='d' x='0' y='0'><feTurbulence type='fractalNoise' baseFrequency='0.008 0.018' numOctaves='4' seed='${seed % 997}'/>` +
+    `<feColorMatrix values='0 0 0 0 ${dark[0]}  0 0 0 0 ${dark[1]}  0 0 0 0 ${dark[2]}  2.8 0 0 0 -1.45'/></filter>` +
+    `<filter id='l' x='0' y='0'><feTurbulence type='fractalNoise' baseFrequency='0.014 0.006' numOctaves='3' seed='${(seed >> 4) % 997}'/>` +
+    `<feColorMatrix values='0 0 0 0 ${light[0]}  0 0 0 0 ${light[1]}  0 0 0 0 ${light[2]}  0 2.4 0 0 -1.3'/></filter>` +
+    `<rect width='320' height='320' filter='url(#d)'/><rect width='320' height='320' filter='url(#l)'/></svg>`;
+  return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
+}
+
+/**
+ * CSS-Variablen für den Plattenspieler-Bildschirm.
+ * @param {RecordItem} record
+ * @param {Palette} [palette]
+ * @returns {Record<string, string>}
+ */
+export function playerTheme(record, palette = coverPalette(record)) {
+  const { bg, a, b, ink } = palette;
+  // Vinyl in der Akzentfarbe; ist die zu nah an der Grundfarbe, die zweite nehmen.
+  const vinyl = Math.abs(luminance(a) - luminance(bg)) < 0.04 ? b : a;
+  const deepVinyl = luminance(vinyl) < 0.03;
+  return {
+    '--theme-top': mix(bg, '#0c0907', 0.55),
+    '--theme-bottom': mix(bg, '#060403', 0.86),
+    '--theme-glow-a': rgba(a, 0.32),
+    '--theme-glow-b': rgba(b, 0.2),
+    '--vinyl': deepVinyl ? '#0c0a09' : mix(vinyl, '#000000', 0.12),
+    '--vinyl-rim': deepVinyl ? '#1c1916' : mix(vinyl, '#000000', 0.35),
+    '--vinyl-runout': deepVinyl ? '#0d0b0a' : mix(vinyl, '#000000', 0.22),
+    '--vinyl-marble': deepVinyl ? 'none' : marble(vinyl, hashString(record.id)),
+    '--label-color': bg,
+    '--label-ink': ink,
+    '--label-ring': mix(a, '#000000', 0.25),
+  };
+}
+
+/**
+ * Palette aus einem echten Cover lesen: Durchschnitt als Grundfarbe, die
+ * kräftigsten Farben als Akzente.
+ * @param {string} url
+ * @returns {Promise<Palette | null>}
+ */
+export async function paletteFromImage(url) {
+  try {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.decoding = 'async';
+    img.src = url;
+    await img.decode();
+    const size = 24;
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = size;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx) return null;
+    ctx.drawImage(img, 0, 0, size, size);
+    const data = ctx.getImageData(0, 0, size, size).data; // wirft bei fehlender CORS-Freigabe
+
+    let sum = [0, 0, 0];
+    /** @type {Array<{ c: RGB, score: number }>} */
+    const vivid = [];
+    for (let i = 0; i < data.length; i += 4) {
+      const c = /** @type {RGB} */ ([data[i], data[i + 1], data[i + 2]]);
+      sum = [sum[0] + c[0], sum[1] + c[1], sum[2] + c[2]];
+      const max = Math.max(...c);
+      const min = Math.min(...c);
+      vivid.push({ c, score: (max - min) * (0.4 + max / 255) });
+    }
+    const count = data.length / 4;
+    const bg = hex([sum[0] / count, sum[1] / count, sum[2] / count]);
+    vivid.sort((x, y) => y.score - x.score);
+    const a = hex(vivid[0].c);
+    const b = hex(vivid[Math.min(vivid.length - 1, Math.floor(vivid.length * 0.15))].c);
+    return { bg, a, b, ink: luminance(bg) > 0.35 ? '#2a2018' : '#f6ead2' };
+  } catch {
+    return null;
+  }
+}

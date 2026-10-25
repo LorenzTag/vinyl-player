@@ -4,6 +4,7 @@
 import { createStore } from './store.js';
 
 /** @typedef {import('../data/types.js').RecordItem} RecordItem */
+/** @typedef {import('../data/types.js').Track} Track */
 /** @typedef {import('../data/errors.js').SourceError} SourceError */
 
 /** @typedef {'playlists' | 'albums' | 'recent'} TabId */
@@ -29,9 +30,31 @@ import { createStore } from './store.js';
  * @property {TabId} tab
  * @property {LayoutId} layout
  * @property {Record<TabId, Resource>} library
- * @property {RecordItem | null} openRecord   Platte, die gerade „auf dem Plattenteller" liegt
- * @property {boolean} playing                Tonarm liegt auf, Wiedergabe läuft
- *                                            (Schritt 2: erst nach Bestätigung durch Spotify)
+ * @property {RecordItem | null} openRecord   Platte, die gerade im Plattenspieler-Bildschirm liegt
+ * @property {Playback} playback              was das Abspielgerät gerade spielt
+ * @property {Record<string, TrackList>} tracklists  Titellisten je Platten-ID (Cache)
+ */
+
+/**
+ * @typedef {Object} TrackList
+ * @property {'idle' | 'loading' | 'ready' | 'error'} status
+ * @property {Track[]} items
+ * @property {SourceError | null} error
+ */
+
+/**
+ * Spiegel des Abspielgeräts. Quelle der Wahrheit sind die Meldungen des Geräts
+ * (Mock bzw. in Schritt 2 Spotify), nicht die Absichten der Oberfläche.
+ *
+ * @typedef {Object} Playback
+ * @property {RecordItem | null} context   laufende Platte (auch pausiert) oder null
+ * @property {Track[]} tracks              Titel der laufenden Platte
+ * @property {number} index                aktueller Titel
+ * @property {boolean} playing
+ * @property {number} positionMs           Position zum Zeitpunkt `at`
+ * @property {number} at                   Date.now() der Messung
+ * @property {boolean} pending             ein Befehl ist unterwegs
+ * @property {SourceError | null} error    letzter fehlgeschlagener Befehl
  */
 
 /** @type {TabId[]} */
@@ -77,7 +100,17 @@ export function createAppStore() {
     layout: prefs.layout ?? 'crate',
     library: { playlists: emptyResource(), albums: emptyResource(), recent: emptyResource() },
     openRecord: null,
-    playing: false,
+    playback: {
+      context: null,
+      tracks: [],
+      index: 0,
+      playing: false,
+      positionMs: 0,
+      at: Date.now(),
+      pending: false,
+      error: null,
+    },
+    tracklists: {},
   };
 
   const store = createStore(initial);

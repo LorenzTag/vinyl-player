@@ -1,0 +1,204 @@
+/* Titelliste als Beiblatt: Querformat von rechts, Hochformat von unten.
+   Animiert wird nur transform/opacity. */
+
+.tracklist {
+  --sheet-axis: x;
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+}
+
+.tracklist[hidden] {
+  display: none;
+}
+
+.tracklist__scrim {
+  position: absolute;
+  inset: 0;
+  background: rgb(0 0 0 / 0.45);
+  opacity: 0;
+  transition: opacity 300ms linear;
+}
+
+.tracklist.is-open .tracklist__scrim {
+  opacity: 1;
+}
+
+.tracklist__sheet {
+  position: absolute;
+  top: calc(var(--safe-top) + 12px);
+  right: calc(var(--safe-right) + 12px);
+  bottom: calc(var(--safe-bottom) + 12px);
+  display: flex;
+  flex-direction: column;
+  width: min(420px, 86vw);
+  border-radius: 6px;
+  color: var(--ink-900);
+  box-shadow: 0 24px 60px -12px rgb(0 0 0 / 0.75);
+  transform: translateX(calc(100% + 40px));
+  transition: transform 340ms var(--ease-out);
+}
+
+.tracklist.is-open .tracklist__sheet {
+  transform: none;
+}
+
+.tracklist__sheet.is-dragging {
+  transition: none;
+}
+
+@media (orientation: portrait) {
+  .tracklist {
+    --sheet-axis: y;
+  }
+
+  .tracklist__sheet {
+    top: auto;
+    left: calc(var(--safe-left) + 12px);
+    right: calc(var(--safe-right) + 12px);
+    width: auto;
+    height: min(64%, 720px);
+    transform: translateY(calc(100% + 40px));
+  }
+}
+
+.tracklist__header {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 18px 12px 14px 22px;
+  border-bottom: 1px solid rgb(90 74 58 / 0.25);
+  touch-action: none;
+}
+
+.tracklist__grabber {
+  position: absolute;
+  top: 7px;
+  left: 50%;
+  width: 44px;
+  height: 5px;
+  margin-left: -22px;
+  border-radius: 3px;
+  background: rgb(90 74 58 / 0.3);
+}
+
+.tracklist__heading {
+  flex: 1;
+  min-width: 0;
+}
+
+.tracklist__title {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: 22px;
+  font-weight: 600;
+}
+
+.tracklist__subtitle {
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-700);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.tracklist__close {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  font-size: 18px;
+  color: var(--ink-700);
+}
+
+.tracklist__close:active {
+  background: rgb(90 74 58 / 0.12);
+}
+
+.tracklist__message {
+  margin: 0;
+  padding: 18px 22px;
+  color: var(--ink-700);
+}
+
+.tracklist__list {
+  flex: 1;
+  margin: 0;
+  padding: 6px 0 12px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  list-style: none;
+}
+
+.tracklist__item {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 56px;
+  padding: 6px 20px 6px 14px;
+  text-align: left;
+  color: inherit;
+}
+
+.tracklist__item:active {
+  background: rgb(90 74 58 / 0.1);
+}
+
+.tracklist__item.is-current {
+  background: rgb(201 160 99 / 0.22);
+}
+
+.tracklist__no {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink-700);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Läuft: kleiner Equalizer statt der Nummer */
+.tracklist__item.is-current .tracklist__no {
+  color: transparent;
+  background:
+    linear-gradient(var(--ink-900), var(--ink-900)) 6px 100% / 4px 60% no-repeat,
+    linear-gradient(var(--ink-900), var(--ink-900)) 13px 100% / 4px 100% no-repeat,
+    linear-gradient(var(--ink-900), var(--ink-900)) 20px 100% / 4px 45% no-repeat;
+  height: 16px;
+}
+
+.tracklist__text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.tracklist__name {
+  overflow: hidden;
+  font-family: var(--font-serif);
+  font-size: 17px;
+  font-weight: 600;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.tracklist__artist {
+  overflow: hidden;
+  font-size: 13.5px;
+  color: var(--ink-700);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.tracklist__time {
+  font-size: 14px;
+  color: var(--ink-700);
+  font-variant-numeric: tabular-nums;
+}

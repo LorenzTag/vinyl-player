@@ -30,6 +30,17 @@
  */
 
 /**
+ * Ein Titel auf einer Platte.
+ *
+ * @typedef {Object} Track
+ * @property {string} id
+ * @property {string} uri            z. B. "spotify:track:…"
+ * @property {string} title
+ * @property {string} artists        Künstler, kommagetrennt
+ * @property {number} durationMs
+ */
+
+/**
  * @typedef {Object} RequestOptions
  * @property {AbortSignal} [signal]
  */
@@ -43,6 +54,32 @@
  * @property {(opts?: RequestOptions) => Promise<RecordItem[]>} getPlaylists
  * @property {(opts?: RequestOptions) => Promise<RecordItem[]>} getAlbums
  * @property {(opts?: RequestOptions) => Promise<RecentItem[]>} getRecentlyPlayed
+ * @property {(record: RecordItem, opts?: RequestOptions) => Promise<Track[]>} getTracks
+ */
+
+/**
+ * Zustand des Abspielgeräts, wie es ihn meldet (Spotify: GET /me/player).
+ *
+ * @typedef {Object} PlaybackSnapshot
+ * @property {string | null} contextUri  laufende Platte (Album/Playlist) oder null
+ * @property {number} index              Titel-Index innerhalb der Platte
+ * @property {boolean} playing
+ * @property {number} positionMs         Position im Titel zum Zeitpunkt `at`
+ * @property {number} at                 Date.now() der Messung (zum Hochrechnen)
+ */
+
+/**
+ * Schnittstelle des Abspielgeräts (Mock jetzt, Spotify Connect in Schritt 2).
+ * Befehle werfen bei Fehlern einen SourceError (z. B. 'no-device').
+ *
+ * @typedef {Object} PlaybackDevice
+ * @property {(cmd: { contextUri: string, index: number, positionMs?: number, tracks: Track[] }) => Promise<void>} play
+ * @property {() => Promise<void>} pause
+ * @property {() => Promise<void>} resume
+ * @property {() => Promise<void>} next
+ * @property {() => Promise<void>} previous
+ * @property {() => Promise<void>} stop       Wiedergabe beenden, Platte „einpacken"
+ * @property {(fn: (snapshot: PlaybackSnapshot) => void) => () => void} subscribe
  */
 
 export {};

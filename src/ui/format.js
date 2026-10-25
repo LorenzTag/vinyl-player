@@ -21,6 +21,18 @@ export function relativeTime(iso, now = Date.now()) {
   return relative.format(Math.round(hours / 24), 'day');
 }
 
+/**
+ * „3:45" bzw. „1:02:03"
+ * @param {number} ms
+ */
+export function formatDuration(ms) {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  const s = String(total % 60).padStart(2, '0');
+  const m = Math.floor(total / 60) % 60;
+  const hours = Math.floor(total / 3600);
+  return hours ? `${hours}:${String(m).padStart(2, '0')}:${s}` : `${m}:${s}`;
+}
+
 /** @param {RecordItem} record */
 export function kindLabel(record) {
   return record.kind === 'album' ? 'Album' : 'Playlist';
