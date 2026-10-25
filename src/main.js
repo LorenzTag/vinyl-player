@@ -2,7 +2,7 @@
 // Einstiegspunkt: entscheidet zwischen Spotify und Demo, kümmert sich um die
 // Rückkehr vom Spotify-Login und startet dann Datenquelle → Zustand → Oberfläche.
 
-import { SPOTIFY_CLIENT_ID, SPOTIFY_SCOPES, redirectUri } from './config.js';
+import { SPOTIFY_SCOPES, redirectUri, spotifyClientId, customClientId, setCustomClientId } from './config.js';
 import { createLibrarySource } from './data/source.js';
 import { createAppStore } from './state/app-state.js';
 import { createLibrary } from './state/library.js';
@@ -84,22 +84,28 @@ if (isDemo()) {
     }),
   });
 } else {
-  const auth = createAuth({ clientId: SPOTIFY_CLIENT_ID, redirectUri: redirectUri(), scopes: SPOTIFY_SCOPES });
+  const auth = createAuth({ clientId: spotifyClientId(), redirectUri: redirectUri(), scopes: SPOTIFY_SCOPES });
   const result = await auth.handleRedirect();
 
   if (!auth.isLoggedIn()) {
     root.replaceChildren(createLoginScreen({
       canLogin: canLogin(),
-      hasClientId: !!SPOTIFY_CLIENT_ID,
+      hasClientId: !!spotifyClientId(),
+      customClientId: customClientId(),
+      redirectUri: redirectUri(),
       message: result && !result.ok ? result.message : null,
       onLogin: () => auth.login(),
+      onClientIdChange: (id) => {
+        setCustomClientId(id);
+        window.location.replace(redirectUri()); // neu starten, damit die Anmeldung die neue ID nutzt
+      },
       onDemo: startDemo,
     }));
   } else {
     const api = createApi(auth);
     const account = createAccountButton({
       label: 'Spotify',
-      detail: 'Angemeldet bei Spotify',
+      detail: customClientId() ? 'Angemeldet bei Spotify · eigene App' : 'Angemeldet bei Spotify',
       actions: [{ label: 'Abmelden', onAction: () => auth.logout(), danger: true }],
     });
     // Abgemeldet (auch wenn Spotify das Token widerruft) → zurück zum Startbildschirm.

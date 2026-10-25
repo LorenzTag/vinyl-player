@@ -4,8 +4,46 @@
 // Die Client ID stammt aus dem Spotify-Dashboard (developer.spotify.com).
 // Sie ist kein Geheimnis: Der Login nutzt PKCE und braucht kein Client Secret.
 // Das Secret gehört NIE in diesen Code.
+//
+// Wer eine eigene Spotify-App angelegt hat, kann deren Client ID auf dem
+// Anmeldebildschirm eingeben; sie gilt dann auf diesem Gerät statt der hier
+// eingetragenen.
 
-export const SPOTIFY_CLIENT_ID = '2f1744da4c6d42d6a317f6003728c9a7';
+const DEFAULT_CLIENT_ID = '2f1744da4c6d42d6a317f6003728c9a7';
+const CLIENT_ID_KEY = 'vinyl-player:client-id:v1';
+
+/** Eigene Client ID auf diesem Gerät, sonst null. */
+export function customClientId() {
+  try {
+    const id = localStorage.getItem(CLIENT_ID_KEY);
+    return id && isValidClientId(id) ? id : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Eigene Client ID merken (null = wieder die eingetragene verwenden).
+ * @param {string | null} id
+ */
+export function setCustomClientId(id) {
+  try {
+    if (id) localStorage.setItem(CLIENT_ID_KEY, id);
+    else localStorage.removeItem(CLIENT_ID_KEY);
+  } catch {
+    // ohne Speicher (privater Modus) geht nur die eingetragene Client ID
+  }
+}
+
+/** Die Client ID, mit der sich die App anmeldet. */
+export function spotifyClientId() {
+  return customClientId() ?? DEFAULT_CLIENT_ID;
+}
+
+/** Spotify Client IDs sind 32 Hex-Zeichen. @param {string} id */
+export function isValidClientId(id) {
+  return /^[0-9a-f]{32}$/i.test(id);
+}
 
 /** Berechtigungen, die die App bei Spotify anfragt */
 export const SPOTIFY_SCOPES = [

@@ -49,6 +49,49 @@ Wichtig für den Login:
 - Im eingebauten Browser-Fenster von Claude scheitert Spotifys Login-Seite. Dafür
   einen normalen Browser nehmen.
 
+### Mit eigener Spotify-App nutzen (für alle anderen)
+
+Spotify lässt pro App im Entwicklermodus nur 5 freigeschaltete Konten zu. Wer
+nicht auf dieser Liste steht, legt sich in 5 Minuten eine eigene Spotify-App an
+und trägt deren Client ID in Vinyl ein – ohne Code, ohne eigenes Hosting. Nötig
+sind nur Spotify Premium und die Spotify-App auf dem iPad.
+
+1. Auf https://developer.spotify.com/dashboard mit dem eigenen Spotify-Konto
+   anmelden (beim ersten Mal die Nutzungsbedingungen bestätigen) und
+   **Create app** wählen.
+2. Ausfüllen:
+   - **App name** und **App description**: beliebig, z. B. „Vinyl“
+   - **Redirect URIs**: `https://lorenztag.github.io/vinyl-player/` eintragen und
+     **Add** tippen – genau so, mit `https://` und dem `/` am Ende
+   - **Which API/SDKs are you planning to use?**: **Web API** ankreuzen
+   - Bedingungen bestätigen, **Save**
+3. In der neuen App unter **Settings → Basic Information** die **Client ID**
+   kopieren (32 Zeichen). Das **Client Secret** wird nie gebraucht – nicht
+   weitergeben.
+4. Auf dem iPad https://lorenztag.github.io/vinyl-player/ in Safari öffnen und
+   **Teilen → Zum Home-Bildschirm** wählen. Dann die App vom Home-Bildschirm
+   starten (sie speichert getrennt von Safari, deshalb erst dort weitermachen).
+5. Auf dem Startbildschirm **Eigene Spotify-App verwenden** aufklappen, die
+   Client ID einfügen, **Speichern**, dann **Mit Spotify verbinden**.
+
+Die Client ID gilt nur auf diesem Gerät. Weitere Personen im Haushalt können in
+der eigenen Spotify-App unter **Settings → User Management** eingetragen werden
+(höchstens 5) oder richten sich genauso eine eigene App ein. Zurück zur
+eingetragenen Client ID: abmelden (runder Knopf oben rechts → Abmelden), dann auf
+dem Startbildschirm **Eigene Client ID entfernen**.
+
+Wenn es hakt:
+- Spotify zeigt **INVALID_CLIENT: Invalid redirect URI** – die Adresse unter
+  Redirect URIs stimmt nicht exakt (oft fehlt das `/` am Ende).
+- Spotify zeigt **INVALID_CLIENT: Invalid client** – die Client ID ist falsch
+  kopiert.
+- Nach der Anmeldung kommt „Spotify verweigert den Zugriff.“ – das Konto ist in
+  dieser Spotify-App nicht unter User Management eingetragen.
+
+Wer Vinyl selbst hosten will (Fork mit eigenem GitHub Pages), trägt die eigene
+Client ID als Vorgabe in `src/config.js` ein und die eigene Pages-Adresse als
+Redirect URI.
+
 ### Auf den Homescreen legen (iPad)
 
 In Safari die Adresse öffnen, dann **Teilen → Zum Home-Bildschirm**. Die App
@@ -123,7 +166,7 @@ src/
     errors.js           einheitliche Fehler (Netz, Timeout, 429, kein Gerät …)
     source.js           Demo-Datenquelle wählen (Spotify-Quelle: src/spotify/)
     mock-source.js      Mock-Daten inkl. Titellisten und simulierter Fehler
-  config.js             Spotify Client ID, Berechtigungen, Redirect-URI
+  config.js             Spotify Client ID (Vorgabe + eigene je Gerät), Berechtigungen, Redirect-URI
   spotify/              Spotify-Anbindung
     auth.js             Login (PKCE), Token-Erneuerung
     api.js              HTTP-Schicht: Timeout, 401, 429, Wiederholungen, Fehler
