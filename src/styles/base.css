@@ -1,0 +1,395 @@
+/* Grundgerüst: Seite, Kopfleiste, Tabs, Layout-Umschalter, Statusanzeigen. */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
+
+html {
+  background: var(--walnut-900);
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  overflow: hidden;
+  overscroll-behavior: none;
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 17px;
+  line-height: 1.4;
+  background: var(--walnut-900);
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+:focus-visible {
+  outline: 3px solid var(--brass-400);
+  outline-offset: 3px;
+}
+
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+.visually-hidden {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.noscript {
+  padding: 40px;
+  font-family: var(--font-serif);
+}
+
+/* ---------- App-Rahmen ---------- */
+
+/* position: fixed + inset statt 100vh: füllt in Safari und als Homescreen-App
+   immer genau den sichtbaren Bereich, auch beim Drehen. */
+.app {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.menu {
+  display: contents;
+}
+
+.menu[inert] .topbar,
+.menu[inert] .stage {
+  pointer-events: none;
+}
+
+/* ---------- Kopfleiste ---------- */
+
+.topbar {
+  position: relative;
+  z-index: 10;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  grid-template-areas: "brand tabs switch";
+  align-items: center;
+  gap: 12px 20px;
+  padding:
+    calc(var(--safe-top) + 14px)
+    calc(var(--safe-right) + var(--gutter))
+    14px
+    calc(var(--safe-left) + var(--gutter));
+  background:
+    var(--tex-grain),
+    linear-gradient(180deg, var(--walnut-950), var(--walnut-900));
+  background-size: 180px 180px, auto;
+  box-shadow:
+    0 1px 0 rgb(201 160 99 / 0.18),
+    0 10px 24px -8px rgb(0 0 0 / 0.8);
+}
+
+@media (max-width: 960px) {
+  .topbar {
+    grid-template-columns: 1fr auto;
+    grid-template-areas:
+      "brand switch"
+      "tabs  tabs";
+  }
+}
+
+.brand {
+  grid-area: brand;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.brand__mark {
+  flex: none;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle, var(--walnut-900) 0 2px, var(--brass-500) 2.5px 8px, transparent 8.5px),
+    repeating-radial-gradient(circle, #1a1513 0 1px, #0c0a09 1px 2.2px);
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 0.06), 0 2px 6px rgb(0 0 0 / 0.6);
+}
+
+.brand__text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.brand__title {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: 26px;
+  font-weight: 600;
+  line-height: 1.05;
+  letter-spacing: 0.01em;
+  color: var(--paper-100);
+}
+
+.brand__subtitle {
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--brass-500);
+}
+
+/* ---------- Segment-Schalter (Tabs + Layout) ---------- */
+
+.segmented {
+  position: relative;
+  display: grid;
+  grid-auto-columns: 1fr;
+  grid-auto-flow: column;
+  padding: 4px;
+  border-radius: 14px;
+  background: rgb(0 0 0 / 0.38);
+  box-shadow:
+    inset 0 1px 3px rgb(0 0 0 / 0.6),
+    0 1px 0 rgb(255 240 220 / 0.05);
+}
+
+/* Markierung des aktiven Segments: gleitet per transform, keine Layout-Arbeit */
+.segmented__thumb {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  left: 4px;
+  width: calc((100% - 8px) / var(--count));
+  border-radius: 10px;
+  transform: translateX(calc(var(--index) * 100%));
+  transition: transform var(--dur-med) var(--ease-out);
+  pointer-events: none;
+}
+
+.segmented__item {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: var(--touch);
+  padding: 0 18px;
+  border-radius: 10px;
+  font-size: 16px;
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--text-dim);
+  transition: color var(--dur-fast) linear;
+}
+
+.segmented__item:active {
+  opacity: 0.75;
+}
+
+/* Tabs: Papier-Karteireiter */
+.tabs {
+  grid-area: tabs;
+  justify-self: center;
+}
+
+.tabs .segmented__item {
+  min-width: 148px;
+}
+
+.tabs .segmented__thumb {
+  background:
+    var(--tex-grain),
+    linear-gradient(180deg, var(--paper-100), var(--paper-200));
+  background-size: 180px 180px, auto;
+  box-shadow:
+    0 1px 0 rgb(255 255 255 / 0.5) inset,
+    0 2px 5px rgb(0 0 0 / 0.45);
+}
+
+.tabs .segmented__item[aria-selected="true"] {
+  color: var(--ink-900);
+}
+
+@media (max-width: 960px) {
+  .tabs {
+    justify-self: stretch;
+  }
+
+  .tabs .segmented__item {
+    min-width: 0;
+  }
+}
+
+/* Layout-Umschalter: Messing */
+.layout-switch {
+  grid-area: switch;
+  justify-self: end;
+}
+
+.layout-switch .segmented__item {
+  padding: 0 16px;
+  font-size: 15px;
+}
+
+.layout-switch .segmented__thumb {
+  background: linear-gradient(180deg, var(--brass-400), var(--brass-500));
+  box-shadow:
+    0 1px 0 rgb(255 255 255 / 0.4) inset,
+    0 2px 5px rgb(0 0 0 / 0.45);
+}
+
+.layout-switch .segmented__item[aria-checked="true"] {
+  color: var(--walnut-900);
+}
+
+.layout-switch svg {
+  width: 20px;
+  height: 20px;
+  flex: none;
+}
+
+/* ---------- Bühne (Inhaltsbereich) ---------- */
+
+.stage {
+  position: relative;
+  min-height: 0;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.view {
+  position: absolute;
+  inset: 0;
+}
+
+.view--entering {
+  animation: view-in 260ms var(--ease-out) both;
+}
+
+@keyframes view-in {
+  from { opacity: 0; }
+}
+
+/* ---------- Statusanzeigen: Laden, Fehler, leer ---------- */
+
+.status {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  padding: 24px calc(var(--safe-right) + var(--gutter)) calc(var(--safe-bottom) + 24px) calc(var(--safe-left) + var(--gutter));
+  text-align: center;
+  pointer-events: none;
+}
+
+.status[hidden] {
+  display: none;
+}
+
+.status > * {
+  pointer-events: auto;
+}
+
+/* Ladeanzeige erst nach kurzer Zeit zeigen – kein Flackern bei schnellen Antworten */
+.status[data-state="loading"] {
+  animation: status-in 220ms 300ms both;
+}
+
+@keyframes status-in {
+  from { opacity: 0; }
+}
+
+.status__spinner {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle, var(--walnut-900) 0 3px, var(--brass-500) 3.5px 15px, transparent 15.5px),
+    conic-gradient(from 0deg, rgb(255 255 255 / 0.12), transparent 20%, rgb(255 255 255 / 0.1) 50%, transparent 70%),
+    repeating-radial-gradient(circle, #1a1513 0 1px, #0c0a09 1px 2.4px);
+  box-shadow: 0 6px 18px rgb(0 0 0 / 0.6);
+  animation: spin 1.8s linear infinite;
+}
+
+.status__title {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--paper-100);
+}
+
+.status__text {
+  max-width: 34ch;
+  margin: -8px 0 0;
+  color: var(--text-dim);
+}
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: var(--touch);
+  min-width: 120px;
+  padding: 0 24px;
+  border-radius: 999px;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--walnut-900);
+  background: linear-gradient(180deg, var(--brass-400), var(--brass-500));
+  box-shadow:
+    0 1px 0 rgb(255 255 255 / 0.4) inset,
+    0 4px 12px rgb(0 0 0 / 0.45);
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+
+.button:active {
+  transform: scale(0.96);
+}
+
+.button--ghost {
+  color: var(--text);
+  background: rgb(255 240 220 / 0.08);
+  box-shadow: inset 0 0 0 1px rgb(255 240 220 / 0.18);
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .status__spinner {
+    animation-duration: 6s;
+  }
+}

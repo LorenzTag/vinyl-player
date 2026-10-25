@@ -1,0 +1,147 @@
+/* Vorschlag B: Plattenstapel (Cover-Flow) auf Filz. Native horizontale
+   Scroll-Geste mit Einrasten; die 3D-Lage jeder Hülle setzt JS per transform. */
+
+.crate {
+  container-type: size;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  --size: min(50cqw, 60cqh, 480px);
+  --slot: calc(var(--size) * 0.26);
+}
+
+/* Lichtkegel und Vignette über dem Filz */
+.crate::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 60% 50% at 50% 42%, rgb(255 226 180 / 0.08), transparent 70%),
+    radial-gradient(ellipse 120% 90% at 50% 40%, transparent 55%, rgb(0 0 0 / 0.55));
+}
+
+.crate__scroller {
+  position: relative;
+  grid-row: 1;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior: contain;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-x;
+  scrollbar-width: none;
+}
+
+.crate__scroller::-webkit-scrollbar {
+  display: none;
+}
+
+.crate__track {
+  display: flex;
+  align-items: center;
+  width: max-content;
+  height: 100%;
+  padding: 0 calc(50cqw - var(--slot) / 2);
+}
+
+.crate-item {
+  position: relative;
+  flex: none;
+  width: var(--slot);
+  height: var(--size);
+  margin-top: calc(var(--size) * 0.04);
+  scroll-snap-align: center;
+}
+
+.crate-item__sleeve {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: var(--size);
+  height: var(--size);
+  margin-left: calc(var(--size) / -2);
+  border-radius: 4px;
+  box-shadow: var(--shadow-sleeve);
+  transform-origin: 50% 50%;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+/* Abdunklung der seitlichen Hüllen – nur opacity wird animiert */
+.crate-item__shade {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(90deg, rgb(8 6 4 / 0.9), rgb(8 6 4 / 0.6));
+  opacity: 0;
+  pointer-events: none;
+}
+
+.crate-item.is-opening .crate-item__sleeve {
+  opacity: 0 !important;
+}
+
+/* Bildunterschrift zur mittleren Platte */
+.crate__caption {
+  position: relative;
+  grid-row: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  min-height: 112px;
+  padding:
+    6px
+    calc(var(--safe-right) + var(--gutter))
+    calc(var(--safe-bottom) + 22px)
+    calc(var(--safe-left) + var(--gutter));
+  text-align: center;
+  pointer-events: none;
+}
+
+.crate__title {
+  max-width: 100%;
+  margin: 0;
+  overflow: hidden;
+  font-family: var(--font-serif);
+  font-size: clamp(22px, 3.2cqw, 30px);
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--paper-100);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.crate__subtitle {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 17px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.crate__meta {
+  margin-top: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--brass-500);
+}
+
+/* Position in der Sammlung, z. B. „3 / 12" */
+.crate__count {
+  position: absolute;
+  right: calc(var(--safe-right) + var(--gutter));
+  bottom: calc(var(--safe-bottom) + 22px);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-faint);
+}
+
+@media (max-width: 700px) {
+  .crate__count {
+    display: none;
+  }
+}

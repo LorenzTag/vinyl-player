@@ -1,0 +1,143 @@
+/* Vorschlag A: Plattenregal – Hüllen stehen frontal auf Holzbrettern,
+   darunter Papier-Etiketten. Vertikal scrollen. */
+
+.shelf {
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+  scrollbar-width: none;
+}
+
+.shelf::-webkit-scrollbar {
+  display: none;
+}
+
+.shelf__cabinet {
+  --gap: 32px;
+  --board: 22px;
+  min-height: 100%;
+  padding:
+    28px
+    calc(var(--safe-right) + var(--gutter))
+    calc(var(--safe-bottom) + 40px)
+    calc(var(--safe-left) + var(--gutter));
+}
+
+/* Eine Regalreihe: Zeile 1 Hüllen, Zeile 2 Brett, Zeile 3 Etiketten.
+   Die Platten liegen per subgrid über allen drei Zeilen – ein Button je Platte. */
+.shelf__row {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(var(--cols), minmax(0, 1fr));
+  grid-template-rows: auto var(--board) auto;
+  column-gap: var(--gap);
+  margin: 0 calc(var(--gutter) * -0.5) 36px;
+  padding: 0 calc(var(--gutter) * 0.5);
+}
+
+.shelf__board {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  margin: 0 calc(var(--gutter) * -0.5);
+  border-radius: 2px;
+  box-shadow:
+    inset 0 5px 0 -1px rgb(255 225 185 / 0.22),   /* Oberkante im Licht */
+    inset 0 -2px 0 rgb(0 0 0 / 0.35),
+    0 3px 0 rgb(0 0 0 / 0.35),
+    0 18px 22px -8px rgb(0 0 0 / 0.75);           /* Schatten auf der Rückwand */
+}
+
+.shelf-item {
+  grid-row: 1 / 4;
+  display: grid;
+  grid-template-rows: subgrid;
+  min-width: 0;
+  text-align: left;
+  -webkit-user-select: none;
+  user-select: none;
+  animation: shelf-item-in 460ms var(--ease-out) backwards;
+  animation-delay: calc(min(var(--i), 14) * 28ms);
+}
+
+@keyframes shelf-item-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+}
+
+.shelf-item__stand {
+  grid-row: 1;
+  align-self: end;
+  position: relative;
+  padding-top: 10px;
+}
+
+/* Hülle lehnt leicht an der Wand; beim Antippen hebt sie sich an */
+.shelf-item__sleeve {
+  position: relative;
+  transform-origin: 50% 100%;
+  transform: translateY(var(--lift, 0px)) rotate(var(--tilt, 0deg));
+  transition: transform 220ms var(--ease-out);
+  border-radius: 3px;
+  box-shadow: var(--shadow-sleeve), 8px 6px 18px -6px rgb(0 0 0 / 0.55);
+}
+
+.shelf-item:active .shelf-item__sleeve,
+.shelf-item.is-pressed .shelf-item__sleeve {
+  --lift: -8px;
+}
+
+.shelf-item.is-opening .shelf-item__sleeve {
+  opacity: 0;
+}
+
+/* Papier-Etikett unter dem Brett */
+.shelf-item__label {
+  grid-row: 3;
+  align-self: start;
+  justify-self: center;
+  width: min(100%, 260px);
+  margin-top: 12px;
+  padding: 10px 12px 11px;
+  border-radius: 2px;
+  color: var(--ink-900);
+  transform: rotate(var(--label-tilt, 0deg));
+  box-shadow:
+    0 1px 0 rgb(255 255 255 / 0.4) inset,
+    0 4px 10px -2px rgb(0 0 0 / 0.55);
+}
+
+.shelf-item__title {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  font-family: var(--font-serif);
+  font-size: 16.5px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.shelf-item__subtitle {
+  margin-top: 3px;
+  overflow: hidden;
+  font-size: 13.5px;
+  line-height: 1.3;
+  color: var(--ink-700);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.shelf-item__meta {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px dashed rgb(90 74 58 / 0.35);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-700);
+}

@@ -1,0 +1,69 @@
+/* Materialien (Holz, Filz, Papier) – komplett per CSS und selbst erzeugtem
+   SVG-Rauschen (feTurbulence), keine Bilddateien. Nur auf ruhenden Flächen
+   einsetzen: animierte Elemente bleiben texturfrei, damit 60 fps halten. */
+
+:root {
+  /* feines Korn, dunkel */
+  --tex-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n' x='0' y='0'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0.9 0 0 0 -0.28'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)'/%3E%3C/svg%3E");
+
+  /* feines Korn, hell */
+  --tex-grain-light: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n' x='0' y='0'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' seed='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1  0 0 0 0 0.95  0 0 0 0 0.85  0.7 0 0 0 -0.3'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)'/%3E%3C/svg%3E");
+
+  /* Holzmaserung, waagerecht (Regalbretter) */
+  --tex-wood-h: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='900' height='160'%3E%3Cfilter id='w' x='0' y='0'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.003 0.11' numOctaves='4' seed='11' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.05  0 0 0 0 0.02  0 0 0 0 0  1.25 0 0 0 -0.42'/%3E%3C/filter%3E%3Crect width='900' height='160' filter='url(%23w)'/%3E%3C/svg%3E");
+
+  /* Holzmaserung, senkrecht (Rückwand aus Dielen) */
+  --tex-wood-v: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='900'%3E%3Cfilter id='w' x='0' y='0'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.07 0.0025' numOctaves='4' seed='5' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  1.3 0 0 0 -0.4'/%3E%3C/filter%3E%3Crect width='200' height='900' filter='url(%23w)'/%3E%3C/svg%3E");
+
+  /* Filzfasern */
+  --tex-felt: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='f' x='0' y='0'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.4' numOctaves='2' seed='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.85  0 0 0 0 0.95  0 0 0 0 0.9  0.55 0 0 0 -0.22'/%3E%3C/filter%3E%3Crect width='220' height='220' filter='url(%23f)'/%3E%3C/svg%3E");
+
+  /* großflächige Wolkigkeit (Filz, Papier) */
+  --tex-mottle: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='600' height='600'%3E%3Cfilter id='m' x='0' y='0'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.008' numOctaves='3' seed='9' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0.8 0 0 0 -0.3'/%3E%3C/filter%3E%3Crect width='600' height='600' filter='url(%23m)'/%3E%3C/svg%3E");
+}
+
+/* Rückwand: dunkle Nussbaum-Dielen mit Fugen, warmes Licht von oben */
+.tex-wall {
+  background-color: var(--walnut-800);
+  background-image:
+    radial-gradient(ellipse 80% 55% at 50% -8%, rgb(255 196 128 / 0.13), transparent 70%),
+    var(--tex-grain),
+    var(--tex-wood-v),
+    repeating-linear-gradient(90deg,
+      rgb(0 0 0 / 0.55) 0 2px,
+      rgb(255 220 180 / 0.05) 2px 3px,
+      transparent 3px 220px),
+    linear-gradient(180deg, var(--walnut-700), var(--walnut-800) 40%, var(--walnut-900));
+  background-size: auto, 180px 180px, 200px 900px, 220px 100%, auto;
+}
+
+/* Regalbrett: helleres Eichenholz, waagerechte Maserung */
+.tex-board {
+  background-color: var(--oak-500);
+  background-image:
+    linear-gradient(180deg, rgb(255 230 190 / 0.28), rgb(255 230 190 / 0) 30%, rgb(0 0 0 / 0.18) 100%),
+    var(--tex-grain),
+    var(--tex-wood-h),
+    linear-gradient(90deg, var(--oak-400), var(--oak-500) 30%, var(--oak-400) 60%, var(--oak-500));
+  background-size: auto, 180px 180px, 900px 160px, auto;
+}
+
+/* Filz: tiefes Waldgrün, faserig, leicht wolkig */
+.tex-felt {
+  background-color: var(--felt-800);
+  background-image:
+    radial-gradient(ellipse 90% 70% at 50% 45%, rgb(255 240 210 / 0.07), transparent 70%),
+    var(--tex-felt),
+    var(--tex-mottle),
+    linear-gradient(180deg, var(--felt-700), var(--felt-900));
+  background-size: auto, 220px 220px, 600px 600px, auto;
+}
+
+/* Papier: cremefarben, feine Körnung */
+.tex-paper {
+  background-color: var(--paper-100);
+  background-image:
+    var(--tex-grain),
+    linear-gradient(180deg, var(--paper-100), var(--paper-200));
+  background-size: 180px 180px, auto;
+}

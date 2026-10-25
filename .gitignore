@@ -1,0 +1,25 @@
+# Abhängigkeiten und Build-Ausgaben (falls später ein Build-Schritt dazukommt)
+node_modules/
+dist/
+build/
+.cache/
+
+# Geheimnisse und lokale Umgebungen
+.env
+.env.*
+!.env.example
+
+# Lokale Werkzeug-Einstellungen
+.claude/settings.local.json
+.vscode/
+.idea/
+
+# Logs
+*.log
+npm-debug.log*
+
+# System- und Python-Reste
+.DS_Store
+Thumbs.db
+__pycache__/
+*.pyc

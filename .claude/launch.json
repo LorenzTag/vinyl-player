@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "vinyl-player",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["dev-server.py", "8080"],
+      "port": 8080
+    }
+  ]
+}

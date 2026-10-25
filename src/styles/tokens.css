@@ -1,0 +1,68 @@
+/* Design-Tokens: Farben, Schrift, Abstände, Bewegung. */
+
+:root {
+  /* Holz */
+  --walnut-950: #0f0a07;
+  --walnut-900: #140d09;
+  --walnut-800: #1e140e;
+  --walnut-700: #2a1c13;
+  --walnut-600: #3a2719;
+  --oak-500: #6e4628;
+  --oak-400: #8c5c35;
+  --oak-300: #a8744a;
+
+  /* Filz */
+  --felt-900: #121a17;
+  --felt-800: #18221e;
+  --felt-700: #1f2b26;
+
+  /* Papier */
+  --paper-100: #f3ead9;
+  --paper-200: #e8dcc4;
+  --paper-300: #d6c6a8;
+  --ink-900: #2a2018;
+  --ink-700: #5a4a3a;
+
+  /* Messing */
+  --brass-500: #c9a063;
+  --brass-400: #dcb77c;
+  --brass-300: #ecd3a3;
+
+  /* Text auf dunklem Grund (Kontrast ≥ 7:1 auf --walnut-800) */
+  --text: #f2e9da;
+  --text-dim: #bfae95;
+  --text-faint: #8f806b;
+
+  /* Schrift: Systemschriften des iPad (New York, SF Pro) – nichts zu laden */
+  --font-serif: ui-serif, "New York", "Iowan Old Style", Georgia, serif;
+  --font-sans: -apple-system, system-ui, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+  --font-round: ui-rounded, -apple-system, system-ui, sans-serif;
+
+  /* Maße */
+  --touch: 48px;                      /* Mindestgröße Touch-Ziel (> 44 px) */
+  --gutter: clamp(16px, 3vw, 40px);
+  --radius-s: 6px;
+  --radius-m: 12px;
+
+  /* Safe Areas (Home-Indikator, Statusleiste) */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+
+  /* Bewegung */
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --dur-fast: 160ms;
+  --dur-med: 280ms;
+
+  /* Tiefe */
+  --shadow-sleeve: 0 1px 1px rgb(0 0 0 / 0.35), 0 10px 22px -6px rgb(0 0 0 / 0.65), 0 26px 40px -18px rgb(0 0 0 / 0.55);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-fast: 1ms;
+    --dur-med: 1ms;
+  }
+}
