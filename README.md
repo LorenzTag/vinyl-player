@@ -80,18 +80,21 @@ Jeder `?mock=…`-Parameter startet die Demo, unabhängig von einer Anmeldung.
 - **Stapel:** wischen, mit Schwung, die Hüllen rasten ein. Eine seitliche Hülle
   antippen holt sie in die Mitte, die mittlere antippen öffnet sie.
   Am Mac gehen auch Pfeiltasten, Trackpad und Mausrad.
-- **Plattenspieler:** Hintergrund, Vinyl (farbig, marmoriert) und Etikett nehmen
-  die Farben des Covers an.
-  - **Tonarm auf die Platte ziehen** startet die Wiedergabe, herunterziehen
-    pausiert. Wo die Nadel landet, bestimmt den Titel, wie bei echtem Vinyl. Beim
-    Ziehen zeigt ein Hinweis, welcher Titel unter der Nadel liegt. Während der
-    Wiedergabe wandert der Arm langsam nach innen. Antippen schaltet ebenfalls um.
-  - **Nach links/rechts wischen:** nächster/vorheriger Titel. „Zurück“ startet
-    nach 3 Sekunden zuerst den laufenden Titel neu.
-  - **Platte zur Hülle ziehen:** Die Platte wird eingepackt, die Wiedergabe endet,
-    und du bist zurück in der Sammlung.
-  - **Leiste:** „Sammlung“ geht zurück, die Musik läuft dabei weiter. Außerdem
-    ⏮ ▶/❚❚ ⏭ und die **Titelliste** (Beiblatt). Ein Titel antippen spielt genau diesen.
+- **Plattenspieler:** Hintergrund, Vinyl und Etikett nehmen die Farben des Covers
+  an. Etikett und Cover zeigen das aktuelle Lied, bei Playlists das jeweilige
+  Album-Cover. Alles geht mit Gesten, die Leiste unten ist optional:
+
+  | Geste | Wirkung |
+  |---|---|
+  | Tonarm auf die Platte ziehen oder antippen | Abspielen / Pause |
+  | Nach oben / unten wischen | nächstes / vorheriges Lied (läuft die Platte noch nicht: Lied auswählen) |
+  | Nach links wischen | Titelliste fährt von rechts herein, Plattenspieler rutscht nach links |
+  | Nach rechts wischen | Titelliste zu, ohne Titelliste: zurück zur Sammlung (Musik läuft weiter) |
+  | Platte aufs Cover ziehen | einpacken: Wiedergabe endet, zurück zur Sammlung |
+  | Ins Leere tippen | Standby: Leiste aus- / einblenden |
+
+  Die Leiste bietet dasselbe noch einmal als Knöpfe: Sammlung, ⏮ ▶/❚❚ ⏭ und
+  Titelliste. Befehle wirken sofort auf Arm und Platte, Spotify zieht kurz danach nach.
 - **Mini-Player:** Läuft eine Platte, schwebt in der Sammlung unten ein
   Mini-Player mit Pause und Weiter. Ein Tipp darauf öffnet den Plattenspieler wieder.
 - **Zurück:** „Sammlung“-Button, Escape oder die Zurück-Geste des Browsers

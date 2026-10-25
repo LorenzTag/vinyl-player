@@ -38,6 +38,7 @@
  * @property {string} title
  * @property {string} artists        Künstler, kommagetrennt
  * @property {number} durationMs
+ * @property {string | null} [imageUrl]  Cover des Albums, auf dem der Titel erschien
  */
 
 /**

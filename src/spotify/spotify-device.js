@@ -19,7 +19,7 @@ import { mapTrack } from './spotify-source.js';
 const POLL_PLAYING_MS = 3000;
 const POLL_IDLE_MS = 8000;
 const POLL_ERROR_MS = 10_000;
-const CONFIRM_DELAYS_MS = [350, 1200]; // Spotify übernimmt Befehle mit kurzer Verzögerung
+const CONFIRM_DELAYS_MS = [400, 1500, 3200]; // Spotify übernimmt Befehle mit kurzer Verzögerung
 
 /**
  * @param {SpotifyApi} api

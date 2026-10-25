@@ -2,22 +2,23 @@
 // Plattenspieler-Bildschirm: Die angetippte Hülle fliegt an ihren Platz und
 // legt sich schräg, die Schallplatte gleitet heraus auf den Plattenteller.
 //
-// Bedienung
-// - Tonarm auf die Platte ziehen = abspielen (die Nadelposition wählt den Titel),
-//   herunterziehen = Pause. Antippen schaltet ebenfalls um.
-// - Platte zur Hülle ziehen = einpacken: Wiedergabe endet, zurück zur Sammlung.
-// - Nach links/rechts wischen = nächster/vorheriger Titel.
-// - Leiste: Sammlung (Musik läuft weiter), ⏮ ▶/❚❚ ⏭, Titelliste.
+// Bedienung ohne Leiste, nur mit Gesten:
+// - Tonarm auf die Platte ziehen / antippen = abspielen, herunter = Pause
+// - nach oben / unten wischen = nächstes / vorheriges Lied (das Cover wechselt)
+// - nach links wischen = Titelliste fährt von rechts herein, nach rechts = zu
+// - nach rechts wischen (ohne Titelliste) = zurück zur Sammlung, Musik läuft weiter
+// - Platte aufs Cover ziehen = einpacken: Wiedergabe endet
+// - ins Leere tippen = Standby: Leiste aus- bzw. wieder einblenden
 //
 // Zuverlässigkeit: Endpositionen legt CSS fest (Quer- und Hochformat);
 // animiert wird nur transform/opacity. Jede Animation hat eine Zeitgrenze und
 // endet in einem definierten Zustand – auch wenn sie unterbrochen wird.
-// Angezeigt wird immer der Zustand des Abspielgeräts, nicht die Absicht.
+// Angezeigt wird der Zustand des Abspielgeräts (bzw. der sofort erwartete).
 
 import { h, svg, clamp, prefersReducedMotion } from './dom.js';
 import { createCover } from './cover-art.js';
 import { playerTheme, paletteFromImage } from './cover-colors.js';
-import { formatDuration, metaLine } from './format.js';
+import { formatDuration } from './format.js';
 import { createTonearm } from './tonearm.js';
 import { createTracklist } from './tracklist.js';
 
@@ -25,14 +26,19 @@ import { createTracklist } from './tracklist.js';
 /** @typedef {import('../state/app-state.js').AppStore} AppStore */
 /** @typedef {import('../state/app-state.js').AppState} AppState */
 /** @typedef {import('../state/playback.js').PlaybackController} PlaybackController */
+/** @typedef {import('../data/types.js').RecordItem} RecordItem */
+/** @typedef {import('../data/types.js').Track} Track */
 
 const EASE_OUT = 'cubic-bezier(0.2, 0.8, 0.2, 1)';
 const EASE_IN_OUT = 'cubic-bezier(0.65, 0, 0.35, 1)';
 const SPIN_SECONDS = 1.8;      // 33⅓ U/min
 const TICK_MS = 250;           // Fortschritt und Tonarm nachführen
 const GESTURE_SLOP = 10;       // px, ab dann ist es eine Wischgeste
-const SKIP_DISTANCE = 70;      // px Wischweg für Titelwechsel
-const PUTAWAY_FRACTION = 0.38; // so weit muss die Platte zur Hülle gezogen werden
+const TAP_MAX_MS = 450;
+const SWIPE_DISTANCE = 60;     // px für Liedwechsel / Titelliste
+const FLICK_SPEED = 0.5;       // px/ms – kurzer, schneller Wisch zählt auch
+const PUTAWAY_FRACTION = 0.38; // so weit muss die Platte aufs Cover gezogen werden
+const LIST_GAP = 24;           // Abstand der Titelliste zum Rand
 
 const ICONS = {
   play: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l10.5-6.5z" fill="currentColor"/></svg>',
@@ -81,13 +87,26 @@ async function settle(animations) {
   }
 }
 
-/** @param {number} ms */
-const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
 /** @param {DOMRect} rect */
 function isUsable(rect) {
   return rect.width > 4 && rect.height > 4 && rect.bottom > 0 && rect.top < window.innerHeight
     && rect.right > 0 && rect.left < window.innerWidth;
+}
+
+/**
+ * Welches Cover gehört zu diesem Lied? Echtes Album-Cover, bei Alben das
+ * Album selbst, sonst ein eigenes generiertes Cover je Lied.
+ * @param {RecordItem} record
+ * @param {Track | null | undefined} track
+ * @returns {RecordItem}
+ */
+function coverRecordFor(record, track) {
+  if (!track) return record;
+  if (track.imageUrl) {
+    return { ...record, id: `${track.id}:cover`, title: track.title, subtitle: track.artists, kind: 'album', imageUrl: track.imageUrl };
+  }
+  if (record.kind === 'album') return record;
+  return { ...record, id: `${track.id}:cover`, title: track.title, subtitle: track.artists, kind: 'album', imageUrl: null };
 }
 
 /**
@@ -109,7 +128,8 @@ function createSpin(el) {
   function step(now) {
     const dt = Math.min(0.05, (now - last) / 1000);
     last = now;
-    rate = target > rate ? Math.min(target, rate + dt / 0.8) : Math.max(target, rate - dt / 1.2);
+    // Anlaufen 0,6 s, Auslaufen 0,9 s – passt zur Bewegung des Tonarms.
+    rate = target > rate ? Math.min(target, rate + dt / 0.6) : Math.max(target, rate - dt / 0.9);
     if (rate <= 0) {
       animation.pause();
     } else {
@@ -173,14 +193,23 @@ export function createRecordPlayer({ store, playback, onRequestClose }) {
   let view = {
     isCurrent: false,
     playing: false,
-    tracks: /** @type {import('../data/types.js').Track[]} */ ([]),
+    /** @type {Track[]} */
+    tracks: [],
     index: -1,
-    /** @type {import('../data/types.js').Track | null} */
+    /** @type {Track | null} */
     track: null,
     count: 0,
   };
-  /** Wo die Nadel zuletzt aufgelegt wurde – Lage des Arms, wenn Spotify keinen Index nennt */
-  let armFraction = 0;
+  /** Gewähltes Lied einer Platte, die noch nicht läuft (per Wischen) */
+  let selectedIndex = 0;
+  /** Arm bleibt, wo die Hand ihn hingelegt hat, bis der Befehl durch ist */
+  let armHold = false;
+  /** Cover wird gerade von Öffnen/Schließen gesteuert – nicht wechseln */
+  let coverLocked = true;
+  /** Titelliste: 0 = zu, 1 = offen */
+  let listProgress = 0;
+  /** Richtung des letzten Liedwechsels per Geste (für die Cover-Animation) */
+  let swipeDirection = 0;
 
   /** Selbst gestartete, noch laufende Animationen */
   /** @type {Set<Animation>} */
@@ -211,9 +240,15 @@ export function createRecordPlayer({ store, playback, onRequestClose }) {
   }
 
   layer.addEventListener('keydown', (event) => {
-    if (event.key !== 'Escape') return;
-    if (current?.tracklist.isOpen()) current.tracklist.close();
-    else onRequestClose();
+    if (!current) return;
+    if (event.key === 'Escape') {
+      if (listProgress > 0) setList(false);
+      else onRequestClose();
+    } else if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+      if (/** @type {Element} */ (event.target).closest('.tracklist')) return;
+      event.preventDefault();
+      changeSong(event.key === 'ArrowUp' ? 1 : -1);
+    }
   });
 
   // ---------- Aufbau ----------
@@ -222,86 +257,117 @@ export function createRecordPlayer({ store, playback, onRequestClose }) {
   function build(item) {
     const { record } = item;
 
-    const spinEl = h('div', { class: 'record__spin' },
-      h('div', { class: 'record__label' },
-        h('div', { class: 'record__label-title' }, record.title),
-        h('div', { class: 'record__label-sub' }, record.kind === 'album' ? record.subtitle : 'Playlist'),
-      ),
-    );
+    const labelTitle = h('div', { class: 'record__label-title' }, record.title);
+    const labelSub = h('div', { class: 'record__label-sub' }, record.subtitle);
+    const spinEl = h('div', { class: 'record__spin' }, h('div', { class: 'record__label' }, labelTitle, labelSub));
     const disc = h('div', { class: 'record__disc', 'aria-hidden': 'true' }, spinEl, h('div', { class: 'record__sheen' }));
-    const sleeve = h('div', { class: 'record__sleeve' }, createCover(record));
+    const coverCard = h('div', { class: 'record__cover' }, createCover(record));
+    const sleeve = h('div', { class: 'record__sleeve' }, coverCard);
     const recordEl = h('div', { class: 'record' }, disc, sleeve);
     const platter = h('div', { class: 'platter', 'aria-hidden': 'true' });
-    const tonearm = createTonearm({
-      onRequest: (on, fraction) => onArmRequest(on, fraction),
-      onHover: (fraction) => showArmHint(fraction),
-    });
+    const tonearm = createTonearm({ onRequest: (on) => onArmRequest(on) });
     const deck = h('div', { class: 'player__deck' }, platter, recordEl, tonearm.el);
-    const hint = h('div', { class: 'player__hint', 'aria-hidden': 'true' });
-    const stage = h('div', { class: 'player__stage' }, deck, hint);
+    const stage = h('div', { class: 'player__stage' }, deck);
 
-    const title = h('h2', { class: 'player__title', id: 'player-title' });
-    const subtitle = h('div', { class: 'player__subtitle' });
+    const heading = h('h2', { class: 'visually-hidden', id: 'player-title' }, record.title);
     const status = h('div', { class: 'player__status', 'aria-live': 'polite' });
+    const wake = h('a', { class: 'player__wake', href: 'spotify:', hidden: true }, 'Spotify öffnen');
     const progressFill = h('div', { class: 'player__progress-fill' });
     const progress = h('div', { class: 'player__progress', 'aria-hidden': 'true' }, progressFill);
 
     const back = h('button', { type: 'button', class: 'player__back', 'aria-label': 'Zurück zur Sammlung (Musik läuft weiter)', onclick: () => onRequestClose() },
       h('span', { 'aria-hidden': 'true' }, '←'), h('span', { class: 'player__back-label' }, 'Sammlung'));
-    const prev = h('button', { type: 'button', class: 'player__ctrl', 'aria-label': 'Vorheriger Titel', onclick: () => skip(-1) });
+    const prev = h('button', { type: 'button', class: 'player__ctrl', 'aria-label': 'Vorheriges Lied', onclick: () => changeSong(-1) });
     const toggle = h('button', { type: 'button', class: 'player__toggle', onclick: () => onToggle() });
-    const next = h('button', { type: 'button', class: 'player__ctrl', 'aria-label': 'Nächster Titel', onclick: () => skip(1) });
-    const listButton = h('button', { type: 'button', class: 'player__ctrl', 'aria-label': 'Titelliste', onclick: () => current?.tracklist.open() });
+    const next = h('button', { type: 'button', class: 'player__ctrl', 'aria-label': 'Nächstes Lied', onclick: () => changeSong(1) });
+    const listButton = h('button', { type: 'button', class: 'player__ctrl', 'aria-label': 'Titelliste', onclick: () => setList(listProgress < 1) });
     prev.append(svg(ICONS.prev));
     next.append(svg(ICONS.next));
     listButton.append(svg(ICONS.list));
 
-    // Spotify-App eingefroren / kein Gerät: App öffnen, danach wird der Befehl wiederholt.
-    const wake = h('a', { class: 'player__wake', href: 'spotify:', hidden: true }, 'Spotify öffnen');
     const bar = h('div', { class: 'player__bar' },
       back,
-      h('div', { class: 'player__now' }, title, subtitle, h('div', { class: 'player__status-row' }, status, wake)),
+      h('div', { class: 'player__info' }, heading, status, wake),
       h('div', { class: 'player__controls' }, prev, toggle, next, listButton),
       progress,
     );
 
     const tracklist = createTracklist({
-      onSelect: (index) => {
-        tracklist.close();
-        playback.playRecord(record, index);
-      },
-      onClose: () => tracklist.close(),
+      onSelect: (index) => selectFromList(index),
+      onClose: () => setList(false),
     });
     const toast = h('div', { class: 'player__toast', role: 'status', 'aria-live': 'polite' });
+    const player = h('div', { class: 'player' }, stage, bar);
 
     const backdrop = h('div', { class: 'player-layer__backdrop' });
-    layer.replaceChildren(
-      backdrop,
-      h('div', { class: 'player' }, stage, bar),
-      tracklist.el,
-      toast,
-    );
-
-    stage.addEventListener('pointerdown', onStagePointerDown);
+    layer.replaceChildren(backdrop, player, tracklist.el, toast);
 
     return {
-      record: recordEl, disc, sleeve, platter, tonearm, deck, stage, bar, backdrop, hint,
-      title, subtitle, status, wake, progress, progressFill, toggle, prev, next, tracklist, toast,
+      record: recordEl, disc, sleeve, coverCard, platter, tonearm, deck, stage, bar, player, backdrop,
+      labelTitle, labelSub, status, wake, progressFill, toggle, prev, next, tracklist, toast,
       spin: createSpin(spinEl),
+      /** @type {string} Cover, das gerade gezeigt wird */
+      coverId: record.id,
     };
   }
 
-  /** Farben des Covers übernehmen (echtes Cover: sobald die Farben gelesen sind). */
-  function applyTheme(/** @type {DisplayItem} */ item) {
-    const set = (/** @type {Record<string, string>} */ vars) => {
-      for (const [name, value] of Object.entries(vars)) layer.style.setProperty(name, value);
+  // ---------- Farben und Cover ----------
+
+  /**
+   * Farben übernehmen. Der Hintergrund blendet weich über (neue Ebene), das
+   * Vinyl wechselt direkt.
+   * @param {RecordItem} coverRecord
+   * @param {boolean} fade
+   */
+  function applyTheme(coverRecord, fade) {
+    if (!current) return;
+    const parts = current;
+    const apply = (/** @type {Record<string, string>} */ vars) => {
+      if (!current || current !== parts) return;
+      for (const [name, value] of Object.entries(vars)) parts.record.style.setProperty(name, value);
+      const next = h('div', { class: 'player-layer__backdrop' });
+      for (const [name, value] of Object.entries(vars)) next.style.setProperty(name, value);
+      const old = parts.backdrop;
+      old.after(next);
+      parts.backdrop = next;
+      if (fade && !prefersReducedMotion()) {
+        const anim = animate(next, { opacity: [0, 1] }, { duration: 700, easing: 'ease-out' });
+        settle([anim]).then(() => old.remove());
+      } else {
+        old.remove();
+      }
     };
-    set(playerTheme(item.record));
-    if (item.record.imageUrl) {
-      paletteFromImage(item.record.imageUrl).then((palette) => {
-        if (palette && current?.item.key === item.key) set(playerTheme(item.record, palette));
+    apply(playerTheme(coverRecord));
+    if (coverRecord.imageUrl) {
+      paletteFromImage(coverRecord.imageUrl).then((palette) => {
+        if (palette && current?.coverId === coverRecord.id) apply(playerTheme(coverRecord, palette));
       });
     }
+  }
+
+  /**
+   * Cover auf der Hülle wechseln: altes gleitet weg, neues kommt nach.
+   * @param {RecordItem} coverRecord
+   * @param {number} direction  1 = nächstes (nach oben), -1 = vorheriges, 0 = überblenden
+   */
+  function showCover(coverRecord, direction) {
+    if (!current || current.coverId === coverRecord.id) return;
+    const parts = current;
+    parts.coverId = coverRecord.id;
+    const old = parts.coverCard;
+    const card = h('div', { class: 'record__cover' }, createCover(coverRecord));
+    old.after(card);
+    parts.coverCard = card;
+    applyTheme(coverRecord, true);
+    if (prefersReducedMotion()) {
+      old.remove();
+      return;
+    }
+    const shift = direction * 55;
+    settle([
+      animate(old, { transform: [old.style.transform || 'none', `translateY(${-shift}%) scale(0.92)`], opacity: [1, 0] }, { duration: 360, easing: EASE_IN_OUT }),
+      animate(card, { transform: [`translateY(${shift}%) scale(0.92)`, 'none'], opacity: [0, 1] }, { duration: 420, easing: EASE_OUT }),
+    ]).then(() => old.remove());
   }
 
   // ---------- Darstellung aus dem Zustand ----------
@@ -313,8 +379,7 @@ export function createRecordPlayer({ store, playback, onRequestClose }) {
 
   /** Fortschritt über die ganze Platte (0…1) – bestimmt die Lage des Tonarms. */
   function recordProgress(/** @type {AppState['playback']} */ pb) {
-    if (!view.isCurrent || !view.count) return 0;
-    if (view.index < 0) return armFraction; // Titel steht in keiner Liste
+    if (!view.isCurrent || !view.count || view.index < 0) return 0.04;
     const within = view.track?.durationMs ? clamp(positionMs(pb) / view.track.durationMs, 0, 1) : 0;
     return (view.index + within) / view.count;
   }
@@ -328,33 +393,37 @@ export function createRecordPlayer({ store, playback, onRequestClose }) {
     const isCurrent = pb.context?.id === record.id;
     const list = state.tracklists[record.id];
     const tracks = isCurrent ? pb.tracks : list?.items ?? [];
-    const index = isCurrent ? pb.index : -1;
-    const track = isCurrent ? tracks[index] ?? pb.track : null;
+    if (!isCurrent) selectedIndex = clamp(selectedIndex, 0, Math.max(0, tracks.length - 1));
+    const index = isCurrent ? pb.index : tracks.length ? selectedIndex : -1;
+    const track = isCurrent ? tracks[index] ?? pb.track : tracks[index] ?? null;
     const playing = isCurrent && pb.playing;
     const count = tracks.length || record.trackCount;
     view = { isCurrent, playing, tracks, index, track, count };
 
-    // Tonarm und Teller. Solange ein Befehl unterwegs ist, bleibt der Arm, wo
-    // die Hand ihn hingelegt hat; danach folgt er dem tatsächlichen Zustand.
-    if (!pb.pending) current.tonearm.setState({ on: playing, progress: recordProgress(pb) });
+    // Tonarm und Teller
+    if (!armHold) current.tonearm.setState({ on: playing, progress: recordProgress(pb) });
     current.spin.set(playing);
 
-    // Leiste
-    current.title.textContent = track ? track.title : record.title;
-    current.subtitle.textContent = track ? `${track.artists} · ${record.title}` : `${record.subtitle} · ${metaLine(item)}`;
-    const where = pb.deviceName ? ` · ${pb.deviceName}` : '';
-    current.status.textContent = pb.pending
-      ? 'Einen Moment …'
+    // Etikett und Cover zeigen das Lied
+    current.labelTitle.textContent = track?.title ?? record.title;
+    current.labelSub.textContent = track?.artists ?? record.subtitle;
+    if (!coverLocked) {
+      showCover(coverRecordFor(record, track), swipeDirection);
+      swipeDirection = 0;
+    }
+
+    // Leiste (nur das Nötigste – Titel steht auf der Platte)
+    const where = pb.deviceName ?? '';
+    current.status.textContent = pb.error
+      ? pb.error.message
       : isCurrent
-        ? `${playing ? '' : 'Pausiert · '}${index >= 0 ? `Titel ${index + 1} von ${tracks.length}` : 'Läuft'}${where}`
+        ? [playing ? '' : 'Pausiert', index >= 0 ? `${index + 1} / ${tracks.length}` : '', where].filter(Boolean).join(' · ')
         : pb.context
           ? `Läuft gerade: ${pb.context.title}`
-          : 'Tonarm auf die Platte ziehen';
+          : 'Tonarm auflegen';
     current.wake.hidden = pb.error?.kind !== 'no-device';
     current.toggle.replaceChildren(svg(playing ? ICONS.pause : ICONS.play));
     current.toggle.setAttribute('aria-label', playing ? 'Pause' : 'Abspielen');
-    current.prev.disabled = !isCurrent;
-    current.next.disabled = !isCurrent;
     current.bar.classList.toggle('has-progress', isCurrent);
 
     current.tracklist.render({
@@ -362,13 +431,14 @@ export function createRecordPlayer({ store, playback, onRequestClose }) {
       tracks,
       current: index,
       playing,
-      status: isCurrent ? 'ready' : list?.status ?? 'loading',
+      status: isCurrent && tracks.length ? 'ready' : list?.status ?? 'loading',
       error: list?.error?.message,
     });
 
     if (pb.error && pb.error !== shownError) {
       shownError = pb.error;
       showToast(pb.error.message);
+      current.player.classList.remove('is-standby'); // Fehler nie verstecken
     }
     tick();
   }
@@ -386,7 +456,7 @@ export function createRecordPlayer({ store, playback, onRequestClose }) {
     const pos = clamp(positionMs(pb), 0, track.durationMs);
     current.progressFill.style.transform = `scaleX(${(pos / track.durationMs).toFixed(4)})`;
     current.status.dataset.time = `${formatDuration(pos)} / ${formatDuration(track.durationMs)}`;
-    if (view.playing && !pb.pending && !gesture) {
+    if (view.playing && !armHold && !gesture) {
       current.tonearm.setState({ on: true, progress: recordProgress(pb) }, 'track');
     }
   }
@@ -397,46 +467,24 @@ export function createRecordPlayer({ store, playback, onRequestClose }) {
     clearTimeout(toastTimer);
     current.toast.textContent = text;
     current.toast.classList.add('is-visible');
-    toastTimer = window.setTimeout(() => current?.toast.classList.remove('is-visible'), 2200);
-  }
-
-  /** Hinweis beim Ziehen des Tonarms: welcher Titel liegt unter der Nadel? */
-  function showArmHint(/** @type {number | null} */ fraction) {
-    if (!current) return;
-    const { hint } = current;
-    const tracks = view.tracks.length ? view.tracks : store.get().tracklists[current.item.record.id]?.items ?? [];
-    const n = tracks.length || current.item.record.trackCount;
-    if (fraction === null || !n) {
-      hint.classList.remove('is-visible');
-      return;
-    }
-    const index = Math.min(n - 1, Math.floor(fraction * n));
-    hint.textContent = tracks[index] ? `${index + 1} · ${tracks[index].title}` : `Titel ${index + 1} von ${n}`;
-    hint.classList.add('is-visible');
+    toastTimer = window.setTimeout(() => current?.toast.classList.remove('is-visible'), 2400);
   }
 
   // ---------- Absichten ----------
 
-  /**
-   * @param {boolean} on
-   * @param {number | null} fraction  Nadelposition (null = angetippt)
-   */
-  function onArmRequest(on, fraction) {
+  /** @param {boolean} on */
+  function onArmRequest(on) {
     if (!current) return;
     const { record } = current.item;
     if (!on) {
       playback.pause();
       return;
     }
-    if (fraction === null) {
-      // Angetippt: laufende Platte fortsetzen, sonst von vorn.
-      if (playback.isContext(record)) playback.resume();
-      else playback.playRecord(record, 0);
-      return;
-    }
-    const n = view.tracks.length || store.get().tracklists[record.id]?.items.length || record.trackCount || 1;
-    armFraction = fraction;
-    playback.dropNeedle(record, Math.min(n - 1, Math.floor(fraction * n)));
+    armHold = true;
+    playback.dropNeedle(record, selectedIndex).finally(() => {
+      armHold = false;
+      render(store.get());
+    });
   }
 
   function onToggle() {
@@ -444,28 +492,103 @@ export function createRecordPlayer({ store, playback, onRequestClose }) {
     const { record } = current.item;
     if (view.playing) playback.pause();
     else if (playback.isContext(record)) playback.resume();
-    else playback.playRecord(record, 0);
+    else playback.playRecord(record, selectedIndex);
   }
 
-  /** @param {1 | -1} direction */
-  function skip(direction) {
-    if (!view.isCurrent) {
-      showToast('Erst den Tonarm auflegen');
+  /**
+   * Nächstes / vorheriges Lied. Läuft die Platte, wird gesprungen; sonst nur
+   * gewählt (startet beim Auflegen der Nadel).
+   * @param {1 | -1} direction
+   */
+  function changeSong(direction) {
+    if (!current) return;
+    swipeDirection = direction;
+    if (view.isCurrent) {
+      if (direction > 0) playback.next();
+      else playback.previous();
       return;
     }
-    showToast(direction > 0 ? 'Nächster Titel' : 'Vorheriger Titel');
-    if (direction > 0) playback.next();
-    else playback.previous();
+    if (!view.tracks.length) {
+      swipeDirection = 0;
+      showToast('Für diese Platte gibt es keine Titelliste – Nadel auflegen zum Abspielen.');
+      return;
+    }
+    const nextIndex = clamp(selectedIndex + direction, 0, view.tracks.length - 1);
+    if (nextIndex === selectedIndex) {
+      swipeDirection = 0;
+      bounceCover(direction);
+      return;
+    }
+    selectedIndex = nextIndex;
+    render(store.get());
   }
 
-  // ---------- Gesten auf der Bühne ----------
+  /** Am Anfang/Ende der Platte: Cover federt nur kurz. */
+  function bounceCover(/** @type {number} */ direction) {
+    if (!current || prefersReducedMotion()) return;
+    animate(current.coverCard, { transform: ['none', `translateY(${-direction * 6}%)`, 'none'] }, { duration: 320, easing: EASE_OUT });
+  }
+
+  /** @param {number} index */
+  function selectFromList(index) {
+    if (!current) return;
+    const { record } = current.item;
+    swipeDirection = index >= view.index ? 1 : -1;
+    selectedIndex = index;
+    setList(false);
+    playback.playRecord(record, index);
+  }
+
+  // ---------- Titelliste (Seite von rechts) ----------
+
+  /** Wie weit Plattenspieler und Liste verschoben werden (px). */
+  function listGeometry() {
+    if (!current) return { deckShift: 0, listShift: 0 };
+    const listWidth = current.tracklist.el.offsetWidth || window.innerWidth;
+    const portrait = window.innerHeight > window.innerWidth;
+    // Querformat: Cover verschwindet links, der Plattenteller bleibt neben der Liste.
+    const platter = current.platter.getBoundingClientRect();
+    const deckShift = portrait ? window.innerWidth : Math.max(0, platter.left - LIST_GAP);
+    return { deckShift, listShift: listWidth + LIST_GAP * 2 };
+  }
+
+  /**
+   * @param {number} progress  0 = zu, 1 = offen
+   * @param {boolean} animated
+   */
+  function placeList(progress, animated) {
+    if (!current) return;
+    listProgress = clamp(progress, 0, 1);
+    const { deckShift, listShift } = listGeometry();
+    for (const el of [current.deck, current.tracklist.el]) el.classList.toggle('is-sliding', animated && !prefersReducedMotion());
+    current.deck.style.transform = listProgress ? `translateX(${(-deckShift * listProgress).toFixed(1)}px)` : '';
+    current.tracklist.el.style.transform = `translateX(${(listShift * (1 - listProgress)).toFixed(1)}px)`;
+  }
+
+  /** @param {boolean} open */
+  function setList(open) {
+    if (!current) return;
+    placeList(open ? 1 : 0, true);
+    current.tracklist.setOpen(open);
+    current.player.classList.toggle('is-list', open);
+    if (open) current.tracklist.revealCurrent();
+  }
+
+  // Beim Drehen des iPad die Lage der Liste neu berechnen.
+  window.addEventListener('resize', () => {
+    if (current) placeList(listProgress, false);
+  });
+
+  // ---------- Gesten ----------
 
   /**
    * @type {{
-   *   id: number, x: number, y: number, onDisc: boolean,
-   *   mode: 'putaway' | 'skip' | 'none' | null,
+   *   id: number, x: number, y: number, t: number,
+   *   onDisc: boolean, inList: boolean,
+   *   mode: 'putaway' | 'horizontal' | 'vertical' | 'none' | null,
    *   samples: Array<{ t: number, x: number, y: number }>,
    *   along: number,
+   *   listStart: number,
    * } | null}
    */
   let gesture = null;
@@ -478,82 +601,134 @@ export function createRecordPlayer({ store, playback, onRequestClose }) {
   }
 
   /** @param {PointerEvent} event */
-  function onStagePointerDown(event) {
-    if (gesture || closing || opening || !current || current.tracklist.isOpen()) return;
+  function onPointerDown(event) {
+    if (gesture || closing || opening || !current) return;
     if (event.pointerType === 'mouse' && event.button !== 0) return;
     const target = /** @type {Element} */ (event.target);
-    if (target.closest('.tonearm__grip, button')) return;
+    if (target.closest('.tonearm__grip, button, a, .player__bar')) return;
     gesture = {
       id: event.pointerId,
       x: event.clientX,
       y: event.clientY,
-      onDisc: !!target.closest('.record__disc'),
+      t: event.timeStamp,
+      onDisc: !!target.closest('.record__disc') && listProgress === 0,
+      inList: !!target.closest('.tracklist'),
       mode: null,
       samples: [{ t: event.timeStamp, x: event.clientX, y: event.clientY }],
       along: 0,
+      listStart: listProgress,
     };
   }
 
   /** @param {PointerEvent} event */
-  function onGestureMove(event) {
+  function onPointerMove(event) {
     if (!gesture || event.pointerId !== gesture.id || !current) return;
-    const dx = event.clientX - gesture.x;
-    const dy = event.clientY - gesture.y;
-    gesture.samples.push({ t: event.timeStamp, x: event.clientX, y: event.clientY });
-    if (gesture.samples.length > 8) gesture.samples.shift();
+    const g = gesture;
+    const dx = event.clientX - g.x;
+    const dy = event.clientY - g.y;
+    g.samples.push({ t: event.timeStamp, x: event.clientX, y: event.clientY });
+    if (g.samples.length > 8) g.samples.shift();
 
-    if (!gesture.mode) {
+    if (!g.mode) {
       if (Math.hypot(dx, dy) < GESTURE_SLOP) return;
       const dir = sleeveDirection();
       const along = dx * dir.ux + dy * dir.uy;
       const across = Math.abs(dx * dir.uy - dy * dir.ux);
-      if (gesture.onDisc && along > 0 && along >= across) {
-        gesture.mode = 'putaway';
+      if (g.onDisc && along > 0 && along >= across) {
+        g.mode = 'putaway';
         current.disc.classList.add('is-dragging');
         current.tonearm.park(true);
-        try {
-          current.stage.setPointerCapture(event.pointerId);
-        } catch {
-          // ohne Capture: Loslassen wird trotzdem fensterweit erkannt
-        }
+      } else if (Math.abs(dx) >= Math.abs(dy)) {
+        g.mode = 'horizontal';
+      } else if (!g.inList && listProgress === 0 && !(g.onDisc && Math.abs(dir.uy) > 0.5)) {
+        g.mode = 'vertical';
       } else {
-        gesture.mode = Math.abs(dx) > Math.abs(dy) ? 'skip' : 'none';
+        g.mode = 'none'; // z. B. Scrollen in der Titelliste
       }
     }
 
-    if (gesture.mode === 'putaway') {
+    if (g.mode === 'putaway') {
       const dir = sleeveDirection();
-      gesture.along = clamp(dx * dir.ux + dy * dir.uy, -24, dir.length);
-      const keep = 1 - gesture.along / dir.length;
+      g.along = clamp(dx * dir.ux + dy * dir.uy, -24, dir.length);
+      const keep = 1 - g.along / dir.length;
       current.disc.style.transform = `translate(${(dir.out.x * keep).toFixed(1)}px, ${(dir.out.y * keep).toFixed(1)}px)`;
+    } else if (g.mode === 'horizontal') {
+      const { deckShift } = listGeometry();
+      const progress = g.listStart - dx / Math.max(1, deckShift);
+      // Ohne Liste nach rechts: kein Vorschieben, nur Rückmeldung am Ende.
+      if (g.listStart === 0 && dx > 0) return;
+      placeList(progress, false);
+    } else if (g.mode === 'vertical') {
+      current.coverCard.style.transform = `translateY(${(dy * 0.35).toFixed(1)}px)`;
     }
   }
 
   /** @param {PointerEvent} event */
-  function onGestureEnd(event) {
+  function onPointerUp(event) {
     if (!gesture || event.pointerId !== gesture.id || !current) return;
     const g = gesture;
     gesture = null;
     const last = g.samples[g.samples.length - 1];
     const first = g.samples.find((s) => last.t - s.t <= 100) ?? last;
     const dt = Math.max(1, last.t - first.t);
+    const vx = (last.x - first.x) / dt;
+    const vy = (last.y - first.y) / dt;
+    const dx = last.x - g.x;
+    const dy = last.y - g.y;
     const cancelled = event.type === 'pointercancel';
+
+    if (!g.mode) {
+      // Tippen ins Leere → Standby (Leiste aus/ein)
+      if (!cancelled && !g.inList && event.timeStamp - g.t < TAP_MAX_MS) toggleStandby();
+      return;
+    }
 
     if (g.mode === 'putaway') {
       const dir = sleeveDirection();
-      const speed = ((last.x - first.x) * dir.ux + (last.y - first.y) * dir.uy) / dt; // px/ms Richtung Hülle
+      const speed = ((last.x - first.x) * dir.ux + (last.y - first.y) * dir.uy) / dt;
       const fraction = g.along / dir.length;
       if (!cancelled && (fraction > PUTAWAY_FRACTION || (fraction > 0.12 && speed > 0.6))) {
         onRequestClose({ putAway: true });
       } else {
         springBack();
       }
-    } else if (g.mode === 'skip' && !cancelled) {
-      const dx = last.x - g.x;
-      const vx = (last.x - first.x) / dt;
-      if (dx < -SKIP_DISTANCE || (dx < -30 && vx < -0.5)) skip(1);
-      else if (dx > SKIP_DISTANCE || (dx > 30 && vx > 0.5)) skip(-1);
+      return;
     }
+
+    if (g.mode === 'horizontal') {
+      if (cancelled) {
+        setList(g.listStart > 0.5);
+        return;
+      }
+      const left = dx < -SWIPE_DISTANCE || (dx < -20 && vx < -FLICK_SPEED);
+      const right = dx > SWIPE_DISTANCE || (dx > 20 && vx > FLICK_SPEED);
+      if (g.listStart === 0) {
+        if (left) setList(true);
+        else if (right) onRequestClose(); // zurück zur Sammlung, Musik läuft weiter
+        else setList(false);
+      } else {
+        setList(!right);
+      }
+      return;
+    }
+
+    if (g.mode === 'vertical') {
+      const card = current.coverCard;
+      const from = card.style.transform;
+      card.style.transform = '';
+      const up = dy < -SWIPE_DISTANCE || (dy < -20 && vy < -FLICK_SPEED);
+      const down = dy > SWIPE_DISTANCE || (dy > 20 && vy > FLICK_SPEED);
+      if (!cancelled && (up || down)) {
+        changeSong(up ? 1 : -1);
+      } else if (from && !prefersReducedMotion()) {
+        animate(card, { transform: [from, 'none'] }, { duration: 260, easing: EASE_OUT });
+      }
+    }
+  }
+
+  function toggleStandby() {
+    if (!current) return;
+    current.player.classList.toggle('is-standby');
   }
 
   /** Platte zurück auf den Plattenteller federn lassen. */
@@ -570,9 +745,10 @@ export function createRecordPlayer({ store, playback, onRequestClose }) {
     }
   }
 
-  window.addEventListener('pointermove', onGestureMove, true);
-  window.addEventListener('pointerup', onGestureEnd, true);
-  window.addEventListener('pointercancel', onGestureEnd, true);
+  layer.addEventListener('pointerdown', onPointerDown);
+  window.addEventListener('pointermove', onPointerMove, true);
+  window.addEventListener('pointerup', onPointerUp, true);
+  window.addEventListener('pointercancel', onPointerUp, true);
 
   // ---------- Öffnen / Schließen ----------
 
@@ -608,8 +784,13 @@ export function createRecordPlayer({ store, playback, onRequestClose }) {
     const parts = build(item);
     current = { item, button, ...parts };
     shownError = store.get().playback.error; // alte Fehler nicht erneut melden
-    applyTheme(item);
+    selectedIndex = 0;
+    listProgress = 0;
+    swipeDirection = 0;
+    coverLocked = true; // erst das Platten-Cover zeigen, damit der Flug passt
+    applyTheme(item.record, false);
     layer.hidden = false;
+    placeList(0, false);
     playback.loadTracks(item.record).catch(() => {}); // Fehler zeigt die Titelliste
     render(store.get());
     clearInterval(ticker);
@@ -640,9 +821,14 @@ export function createRecordPlayer({ store, playback, onRequestClose }) {
             { duration: 420, delay: 700, easing: EASE_OUT, fill: 'backwards' }),
         ]);
       }
-      if (current?.record === parts.record && !closing) parts.toggle.focus({ preventScroll: true });
+      if (current?.record === parts.record && !closing) {
+        coverLocked = false;
+        render(store.get()); // jetzt das Cover des laufenden/gewählten Lieds
+        parts.toggle.focus({ preventScroll: true });
+      }
     } catch (err) {
       console.error('[player] Öffnen-Animation fehlgeschlagen', err);
+      coverLocked = false;
     }
   }
 
@@ -666,7 +852,11 @@ export function createRecordPlayer({ store, playback, onRequestClose }) {
     const parts = current;
     const reduced = prefersReducedMotion();
     gesture = null;
-    parts.tracklist.close();
+    if (listProgress > 0) setList(false);
+    // Für den Rückflug wieder das Cover der Platte zeigen (passt zur Hülle im Regal).
+    coverLocked = false;
+    showCover(parts.item.record, 0);
+    coverLocked = true;
 
     try {
       const target = sleeve?.isConnected ? sleeve.getBoundingClientRect() : null;
@@ -705,7 +895,6 @@ export function createRecordPlayer({ store, playback, onRequestClose }) {
       clearTimeout(toastTimer);
       parts.spin.cancel();
       parts.tonearm.destroy();
-      parts.tracklist.destroy();
       layer.hidden = true;
       for (const animation of [...active, ...layer.getAnimations({ subtree: true })]) animation.cancel();
       active.clear();
@@ -713,6 +902,8 @@ export function createRecordPlayer({ store, playback, onRequestClose }) {
       layer.removeAttribute('style');
       parts.button.classList.remove('is-opening');
       current = null;
+      armHold = false;
+      listProgress = 0;
     }
   }
 

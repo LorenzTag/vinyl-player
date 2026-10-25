@@ -67,6 +67,7 @@ export function mapTrack(t) {
     title: t.name || 'Ohne Titel',
     artists: (t.artists ?? []).map((x) => x.name).join(', '),
     durationMs: t.duration_ms ?? 0,
+    imageUrl: pickImage(t.album?.images),
   };
 }
 
@@ -154,8 +155,11 @@ export function createSpotifySource(api) {
       const { kind, id } = parseUri(record.uri);
       if (kind === 'album') {
         const items = await api.getAll(`/albums/${id}/tracks`, { query: { limit: 50 }, max: 1000, signal: opts?.signal });
-        // Album-Tracks sind „simplified" (ohne album) – genügt hier.
-        return items.map((t) => mapTrack({ ...t, type: t.type ?? 'track' })).filter((t) => t !== null);
+        // Album-Tracks sind „simplified" (ohne album) – Cover kommt vom Album selbst.
+        return items
+          .map((t) => mapTrack({ ...t, type: t.type ?? 'track' }))
+          .filter((t) => t !== null)
+          .map((t) => ({ ...t, imageUrl: record.imageUrl }));
       }
       try {
         const entries = await api.getAll(`/playlists/${id}/items`, {

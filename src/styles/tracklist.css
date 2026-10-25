@@ -1,86 +1,35 @@
-/* Titelliste als Beiblatt: Querformat von rechts, Hochformat von unten.
-   Animiert wird nur transform/opacity. */
+/* Titelliste als Seite rechts: fährt per Wischgeste herein, während der
+   Plattenspieler nach links rutscht. Lage (transform) setzt record-player.js. */
 
 .tracklist {
-  --sheet-axis: x;
   position: absolute;
-  inset: 0;
   z-index: 4;
-}
-
-.tracklist[hidden] {
-  display: none;
-}
-
-.tracklist__scrim {
-  position: absolute;
-  inset: 0;
-  background: rgb(0 0 0 / 0.45);
-  opacity: 0;
-  transition: opacity 300ms linear;
-}
-
-.tracklist.is-open .tracklist__scrim {
-  opacity: 1;
-}
-
-.tracklist__sheet {
-  position: absolute;
-  top: calc(var(--safe-top) + 12px);
-  right: calc(var(--safe-right) + 12px);
-  bottom: calc(var(--safe-bottom) + 12px);
+  top: calc(var(--safe-top) + 24px);
+  right: calc(var(--safe-right) + 24px);
+  bottom: calc(var(--safe-bottom) + 24px);
   display: flex;
   flex-direction: column;
-  width: min(420px, 86vw);
-  border-radius: 6px;
+  width: min(46%, 520px);
+  border-radius: 8px;
   color: var(--ink-900);
   box-shadow: 0 24px 60px -12px rgb(0 0 0 / 0.75);
-  transform: translateX(calc(100% + 40px));
-  transition: transform 340ms var(--ease-out);
+  transform: translateX(calc(100% + 48px));
 }
 
-.tracklist.is-open .tracklist__sheet {
-  transform: none;
-}
-
-.tracklist__sheet.is-dragging {
-  transition: none;
-}
-
+/* Hochformat: Liste füllt die Breite, der Plattenspieler rutscht ganz hinaus */
 @media (orientation: portrait) {
   .tracklist {
-    --sheet-axis: y;
-  }
-
-  .tracklist__sheet {
-    top: auto;
-    left: calc(var(--safe-left) + 12px);
-    right: calc(var(--safe-right) + 12px);
+    left: calc(var(--safe-left) + 24px);
     width: auto;
-    height: min(64%, 720px);
-    transform: translateY(calc(100% + 40px));
   }
 }
 
 .tracklist__header {
-  position: relative;
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 18px 12px 14px 22px;
+  padding: 18px 10px 14px 22px;
   border-bottom: 1px solid rgb(90 74 58 / 0.25);
-  touch-action: none;
-}
-
-.tracklist__grabber {
-  position: absolute;
-  top: 7px;
-  left: 50%;
-  width: 44px;
-  height: 5px;
-  margin-left: -22px;
-  border-radius: 3px;
-  background: rgb(90 74 58 / 0.3);
 }
 
 .tracklist__heading {
@@ -112,7 +61,8 @@
   width: 48px;
   height: 48px;
   border-radius: 50%;
-  font-size: 18px;
+  font-size: 30px;
+  line-height: 1;
   color: var(--ink-700);
 }
 
@@ -126,6 +76,10 @@
   color: var(--ink-700);
 }
 
+.tracklist__message[hidden] {
+  display: none;
+}
+
 .tracklist__list {
   flex: 1;
   margin: 0;
@@ -133,6 +87,7 @@
   overflow-y: auto;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
   list-style: none;
 }
 
@@ -166,12 +121,12 @@
 
 /* Läuft: kleiner Equalizer statt der Nummer */
 .tracklist__item.is-current .tracklist__no {
+  height: 16px;
   color: transparent;
   background:
     linear-gradient(var(--ink-900), var(--ink-900)) 6px 100% / 4px 60% no-repeat,
     linear-gradient(var(--ink-900), var(--ink-900)) 13px 100% / 4px 100% no-repeat,
     linear-gradient(var(--ink-900), var(--ink-900)) 20px 100% / 4px 45% no-repeat;
-  height: 16px;
 }
 
 .tracklist__text {

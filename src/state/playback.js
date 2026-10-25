@@ -10,6 +10,10 @@
 //   Neuladen), wird die Platte nachgeschlagen und angezeigt
 // - Scheitert Abspielen an „kein Gerät", kann der Befehl nach dem Öffnen der
 //   Spotify-App einmal wiederholt werden (retryAfterWake)
+// - Sofortige Rückmeldung: Befehle setzen den erwarteten Zustand gleich
+//   (Platte stoppt/dreht, Arm bewegt sich). Spotify bestätigt mit Verzögerung –
+//   widersprechende, also veraltete Meldungen werden kurz ignoriert. Scheitert
+//   der Befehl, springt die Anzeige zurück.
 
 import { SourceError, isAbortError, toSourceError } from '../data/errors.js';
 
@@ -24,6 +28,8 @@ import { SourceError, isAbortError, toSourceError } from '../data/errors.js';
 
 const TRACK_RETRIES_MS = [800];
 const WAKE_RETRY_WINDOW_MS = 2 * 60_000;
+const EXPECT_MS = 3000; // so lange gelten widersprechende Gerätemeldungen als veraltet
+const RESTART_AFTER_MS = 3000; // „Zurück" nach 3 s: Titel neu starten
 
 /**
  * @param {AppStore} store
@@ -47,6 +53,25 @@ export function createPlayback(store, source, device) {
   /** letzte Gerätemeldung (für späteres Zuordnen nachgeladener Platten) */
   /** @type {PlaybackSnapshot | null} */
   let lastSnapshot = null;
+  /**
+   * Erwarteter Zustand nach einem Befehl. Meldungen, die ihm widersprechen,
+   * stammen von vor dem Befehl und werden bis `until` übergangen.
+   * @type {{ playing?: boolean, contextUri?: string | null, trackUri?: string, until: number } | null}
+   */
+  let expect = null;
+
+  /** @param {PlaybackSnapshot} snapshot */
+  function isStale(snapshot) {
+    if (!expect) return false;
+    if (Date.now() > expect.until) {
+      expect = null;
+      return false;
+    }
+    if (expect.playing !== undefined && snapshot.playing !== expect.playing) return true;
+    if (expect.contextUri !== undefined && snapshot.contextUri !== expect.contextUri) return true;
+    if (expect.trackUri !== undefined && snapshot.track?.uri !== expect.trackUri) return true;
+    return false;
+  }
 
   /** @param {Partial<Playback>} patch */
   function setPlayback(patch) {
@@ -84,6 +109,7 @@ export function createPlayback(store, source, device) {
 
   /** @param {PlaybackSnapshot} snapshot */
   function applySnapshot(snapshot) {
+    if (isStale(snapshot)) return;
     lastSnapshot = snapshot;
     const { playback } = store.get();
     let { context, tracks } = playback;
@@ -201,6 +227,38 @@ export function createPlayback(store, source, device) {
 
   const isContext = (/** @type {RecordItem} */ record) => store.get().playback.context?.id === record.id;
 
+  /** aktuelle (hochgerechnete) Position im Titel */
+  function currentPosition() {
+    const pb = store.get().playback;
+    return pb.playing ? pb.positionMs + (Date.now() - pb.at) : pb.positionMs;
+  }
+
+  /**
+   * Erwarteten Zustand sofort anzeigen, Befehl senden; bei Fehler zurück.
+   * @param {Partial<Playback>} patch
+   * @param {Omit<NonNullable<typeof expect>, 'until'> | null} expectation
+   * @param {() => Promise<void>} command
+   */
+  function optimistic(patch, expectation, command) {
+    const current = store.get().playback;
+    /** @type {Partial<Playback>} */
+    const before = {};
+    for (const key of /** @type {(keyof Playback)[]} */ (Object.keys(patch))) {
+      // @ts-ignore – gleiche Schlüssel, gleicher Typ
+      before[key] = current[key];
+    }
+    setPlayback(patch);
+    const mine = expectation ? { ...expectation, until: Date.now() + EXPECT_MS } : null;
+    expect = mine;
+    return run(command).then((ok) => {
+      if (!ok && expect === mine) {
+        expect = null;
+        setPlayback(before);
+      }
+      return ok;
+    });
+  }
+
   /**
    * Platte ab einem bestimmten Titel abspielen. Ohne Titelliste (fremde
    * Playlist) wird über die Position gestartet.
@@ -219,35 +277,86 @@ export function createPlayback(store, source, device) {
       }
       const count = tracks.length || record.trackCount;
       if (!count) throw new SourceError('unknown', { message: 'Auf dieser Platte sind keine Titel.' });
+      const start = Math.max(0, Math.min(index, count - 1));
+      const before = store.get().playback;
       starting = { record, tracks };
-      await device.play({ contextUri: record.uri, index: Math.max(0, Math.min(index, count - 1)), tracks });
+      // Sofort anzeigen: Platte läuft ab diesem Titel.
+      setPlayback({
+        context: record,
+        tracks,
+        index: tracks.length ? start : -1,
+        track: tracks[start] ?? null,
+        playing: true,
+        positionMs: 0,
+        at: Date.now(),
+      });
+      const mine = { contextUri: record.uri, playing: true, ...(tracks[start] ? { trackUri: tracks[start].uri } : {}), until: Date.now() + EXPECT_MS };
+      expect = mine;
+      try {
+        await device.play({ contextUri: record.uri, index: start, tracks });
+      } catch (err) {
+        if (expect === mine) {
+          expect = null;
+          setPlayback({
+            context: before.context, tracks: before.tracks, index: before.index, track: before.track,
+            playing: before.playing, positionMs: before.positionMs, at: before.at,
+          });
+        }
+        throw err;
+      }
     });
   }
 
-  return {
+  const controller = {
     loadTracks,
 
     playRecord,
 
     /**
-     * Nadel auf die Platte: läuft sie schon (pausiert) auf demselben Titel → fortsetzen,
+     * Nadel auf die Platte: läuft die Platte schon (pausiert) → fortsetzen,
      * sonst ab dem gewählten Titel starten.
      * @param {RecordItem} record
-     * @param {number} index
+     * @param {number} index  gewählter Titel (nur für eine noch nicht laufende Platte)
      */
     dropNeedle(record, index) {
       const { playback } = store.get();
-      if (isContext(record) && playback.index === index && !playback.playing) return run(() => device.resume());
+      if (isContext(record)) return playback.playing ? Promise.resolve(true) : controller.resume();
       return playRecord(record, index);
     },
 
-    pause: () => run(() => device.pause()),
-    resume: () => run(() => device.resume()),
-    next: () => run(() => device.next()),
-    previous: () => run(() => device.previous()),
+    pause() {
+      return optimistic({ playing: false, positionMs: currentPosition(), at: Date.now() }, { playing: false }, () => device.pause());
+    },
+
+    resume() {
+      if (!store.get().playback.context) return run(() => device.resume());
+      return optimistic({ playing: true, positionMs: currentPosition(), at: Date.now() }, { playing: true }, () => device.resume());
+    },
+
+    next() {
+      const { tracks, index } = store.get().playback;
+      const target = index >= 0 ? tracks[index + 1] : undefined;
+      if (!target) return run(() => device.next());
+      return optimistic({ index: index + 1, track: target, positionMs: 0, at: Date.now() }, { trackUri: target.uri }, () => device.next());
+    },
+
+    previous() {
+      const { tracks, index } = store.get().playback;
+      if (currentPosition() > RESTART_AFTER_MS || index <= 0) {
+        return optimistic({ positionMs: 0, at: Date.now() }, null, () => device.previous());
+      }
+      const target = tracks[index - 1];
+      return optimistic({ index: index - 1, track: target, positionMs: 0, at: Date.now() }, { trackUri: target.uri }, () => device.previous());
+    },
 
     /** Platte einpacken: Wiedergabe beenden. */
-    stop: () => run(() => device.stop()),
+    stop() {
+      return optimistic(
+        { context: null, tracks: [], index: -1, track: null, playing: false },
+        { contextUri: null, playing: false },
+        () => device.stop(),
+      );
+    },
 
     /**
      * Nach dem Öffnen der Spotify-App: den an „kein Gerät" gescheiterten
@@ -263,6 +372,7 @@ export function createPlayback(store, source, device) {
     /** Ist diese Platte gerade die laufende (auch pausiert)? */
     isContext,
   };
+  return controller;
 }
 
 /** @typedef {ReturnType<typeof createPlayback>} PlaybackController */
