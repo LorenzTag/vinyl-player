@@ -92,10 +92,16 @@
   position: absolute;
   inset: 0;
   border-radius: 50%;
+  /* Prozentwerte beziehen sich auf den Radius (closest-side) */
   background:
-    radial-gradient(circle, transparent 0 34%, #070605 34.4% 35.6%, transparent 36%),
-    radial-gradient(circle, transparent 0 47.2%, #191614 47.4% 50%),
-    repeating-radial-gradient(circle, #161312 0 0.7px, #0b0a09 0.7px 1.7px);
+    radial-gradient(circle closest-side, transparent 0 95.5%, #1c1916 96% 98.8%, #090807 99.4%),
+    radial-gradient(circle closest-side,
+      transparent 0 57.6%, rgb(255 245 230 / 0.06) 58% 58.6%,
+      transparent 59% 70.4%, rgb(255 245 230 / 0.06) 70.8% 71.4%,
+      transparent 71.8% 83%, rgb(255 245 230 / 0.06) 83.4% 84%,
+      transparent 84.4%),
+    radial-gradient(circle closest-side, #0d0b0a 0 43%, #1a1715 43.4% 43.8%, #0d0b0a 44.2% 45%, transparent 45.4%),
+    repeating-radial-gradient(circle closest-side, #181513 0 0.5%, #0b0a09 0.5% 1.15%);
   background-color: #0c0a09;
   animation: spin 1.8s linear infinite;   /* 33⅓ U/min */
   animation-play-state: paused;
@@ -115,8 +121,8 @@
   border-radius: 50%;
   container-type: inline-size;
   background:
-    radial-gradient(circle, #050403 0 3.2%, transparent 3.6%),
-    radial-gradient(circle, transparent 0 46%, rgb(0 0 0 / 0.18) 47%, transparent 48%),
+    radial-gradient(circle closest-side, #050403 0 7%, transparent 7.6%),
+    radial-gradient(circle closest-side, transparent 0 88%, rgb(0 0 0 / 0.2) 89% 90.5%, transparent 91.5%),
     var(--label-color, var(--brass-500));
   color: var(--label-ink, var(--ink-900));
   text-align: center;
@@ -158,8 +164,8 @@
     transparent 50deg 190deg,
     rgb(255 240 220 / 0.1) 212deg,
     transparent 232deg 360deg);
-  -webkit-mask: radial-gradient(circle, transparent 0 33%, #000 34%);
-  mask: radial-gradient(circle, transparent 0 33%, #000 34%);
+  -webkit-mask: radial-gradient(circle closest-side, transparent 0 37%, #000 38%);
+  mask: radial-gradient(circle closest-side, transparent 0 37%, #000 38%);
   pointer-events: none;
 }
 

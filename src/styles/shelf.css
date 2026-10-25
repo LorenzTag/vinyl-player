@@ -61,6 +61,10 @@
   animation-delay: calc(min(var(--i), 14) * 28ms);
 }
 
+.no-enter .shelf-item {
+  animation: none;
+}
+
 @keyframes shelf-item-in {
   from {
     opacity: 0;
