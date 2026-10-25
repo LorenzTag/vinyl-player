@@ -20,6 +20,7 @@ const ANGLE = 58;         // Drehung der seitlichen Hüllen in Grad
 const RANGE = 5;          // so viele Hüllen je Seite werden dargestellt
 const DRAG_THRESHOLD = 8; // px, ab dann ist es Ziehen statt Tippen
 const RUBBER = 0.3;       // Widerstand hinter dem ersten/letzten Element
+const MAX_VELOCITY = 28;  // Platten/s – deckelt Ausreißer bei der Schwungberechnung
 
 /**
  * @typedef {Object} CrateEntry
@@ -201,11 +202,14 @@ export function createCrateView({ onOpen }) {
     }
     suppressClickUntil = event.timeStamp + 80;
 
-    // Geschwindigkeit aus den letzten ~100 ms (Platten pro Sekunde)
+    // Geschwindigkeit aus den letzten ~100 ms (Platten pro Sekunde). Hat der
+    // Finger vor dem Loslassen stillgehalten, gibt es keinen Schwung.
     const last = samples[samples.length - 1];
     const firstRecent = samples.find((s) => last.t - s.t <= 100) ?? last;
     const dt = (last.t - firstRecent.t) / 1000;
-    const velocity = event.type === 'pointercancel' || dt <= 0 ? 0 : -(last.x - firstRecent.x) / dt / (SLOT * size);
+    const resting = event.timeStamp - last.t > 80;
+    const raw = event.type === 'pointercancel' || resting || dt <= 0 ? 0 : -(last.x - firstRecent.x) / dt / (SLOT * size);
+    const velocity = clamp(raw, -MAX_VELOCITY, MAX_VELOCITY);
 
     const projected = pos + velocity * 0.22;
     const destination = clamp(Math.round(projected), 0, entries.length - 1);

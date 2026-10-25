@@ -12,6 +12,7 @@ import functools
 import http.server
 import os
 import socket
+import subprocess
 import sys
 
 PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8080
@@ -39,20 +40,43 @@ class NoCacheHandler(http.server.SimpleHTTPRequestHandler):
                 del self.headers[header]
         return super().send_head()
 
-    def log_message(self, fmt, *args):
-        sys.stderr.write("  %s  %s\n" % (self.address_string(), fmt % args))
+    def log_request(self, code="-", size="-"):
+        # Nur Auffälliges loggen: Fehler und den ersten Abruf eines neuen Geräts.
+        client = self.client_address[0]
+        status = int(code) if str(code).isdigit() else 0
+        if client not in SEEN_CLIENTS and client != "127.0.0.1":
+            SEEN_CLIENTS.add(client)
+            sys.stderr.write(f"  Neues Gerät verbunden: {client}\n")
+        if status >= 400 and not self.path.startswith("/favicon"):
+            sys.stderr.write(f"  {status}  {self.path}\n")
+
+    def log_error(self, fmt, *args):
+        pass  # wird über log_request gemeldet
 
 
-def lan_ip():
-    """IP-Adresse im lokalen Netz (ohne dass tatsächlich Daten gesendet werden)."""
-    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    try:
-        s.connect(("10.255.255.255", 1))
-        return s.getsockname()[0]
-    except OSError:
-        return None
-    finally:
-        s.close()
+SEEN_CLIENTS = set()
+
+
+def lan_ips():
+    """Mögliche WLAN/LAN-Adressen des Mac (en0/en1 bevorzugt)."""
+    found = []
+    for iface in ("en0", "en1"):
+        try:
+            ip = subprocess.run(["ipconfig", "getifaddr", iface], capture_output=True, text=True, timeout=2).stdout.strip()
+        except (OSError, subprocess.SubprocessError):
+            ip = ""
+        if ip and ip not in found:
+            found.append(ip)
+    if not found:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            s.connect(("10.255.255.255", 1))  # sendet nichts, wählt nur die Route
+            found.append(s.getsockname()[0])
+        except OSError:
+            pass
+        finally:
+            s.close()
+    return found
 
 
 def main():
@@ -62,10 +86,9 @@ def main():
     except OSError as err:
         sys.exit(f"Port {PORT} ist belegt ({err}). Anderen Port wählen: python3 dev-server.py 8081")
 
-    ip = lan_ip()
     print("\n  Vinyl Player – Dev-Server läuft\n")
     print(f"  Mac:   http://127.0.0.1:{PORT}")
-    if ip:
+    for ip in lan_ips():
         print(f"  iPad:  http://{ip}:{PORT}   (gleiches WLAN)")
     print("\n  Beenden mit Ctrl+C\n", flush=True)
 

@@ -11,6 +11,12 @@
   --size: min(50cqw, 60cqh, 480px);
 }
 
+@media (orientation: portrait) {
+  .crate {
+    --size: min(60cqw, 52cqh, 520px);
+  }
+}
+
 /* Lichtkegel und Vignette über dem Filz */
 .crate::before {
   content: "";
@@ -89,6 +95,7 @@
     calc(var(--safe-bottom) + 22px)
     calc(var(--safe-left) + var(--gutter) + 64px);
   text-align: center;
+  pointer-events: none;
 }
 
 .crate__title {
