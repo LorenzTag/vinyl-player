@@ -1,6 +1,6 @@
 // @ts-check
 // Domänen-Typen der App. Bewusst unabhängig vom Spotify-JSON: Die Spotify-Quelle
-// (Schritt 2) übersetzt API-Antworten in genau diese Formen, die UI kennt nur sie.
+// übersetzt API-Antworten in genau diese Formen, die UI kennt nur sie.
 
 /**
  * @typedef {'playlist' | 'album'} RecordKind
@@ -46,7 +46,7 @@
  */
 
 /**
- * Schnittstelle jeder Datenquelle (Mock jetzt, Spotify in Schritt 2).
+ * Schnittstelle jeder Datenquelle (Demo oder Spotify).
  * Fehler werden immer als SourceError geworfen (siehe errors.js).
  *
  * @typedef {Object} LibrarySource
@@ -74,7 +74,7 @@
  */
 
 /**
- * Schnittstelle des Abspielgeräts (Mock jetzt, Spotify Connect in Schritt 2).
+ * Schnittstelle des Abspielgeräts (Demo oder Spotify Connect).
  * Befehle werfen bei Fehlern einen SourceError (z. B. 'no-device').
  *
  * @typedef {Object} PlaybackDevice

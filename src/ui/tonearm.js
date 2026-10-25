@@ -9,7 +9,7 @@
 // ON_MIN (Einlaufrille) und ON_MAX (Auslaufrille) liegt die Nadel in den Rillen.
 //
 // Der Arm meldet nur Absichten (onRequest). Was wirklich läuft, kommt per
-// setState() vom Zustand zurück – in Schritt 2 erst nach Bestätigung durch Spotify.
+// setState() vom Zustand zurück – bei Spotify erst, wenn das Gerät es bestätigt.
 
 import { h, clamp, prefersReducedMotion } from './dom.js';
 

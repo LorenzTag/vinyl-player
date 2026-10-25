@@ -1,6 +1,6 @@
 // @ts-check
-// Einziger Ort, der entscheidet, woher die Daten kommen.
-// Schritt 2: hier die Spotify-Quelle einhängen – UI und Zustand bleiben unverändert.
+// Datenquelle für die Demo. Die Spotify-Quelle (src/spotify/spotify-source.js)
+// wählt main.js nach der Anmeldung – UI und Zustand sind für beide gleich.
 
 import { createMockSource } from './mock-source.js';
 

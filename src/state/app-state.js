@@ -44,7 +44,7 @@ import { createStore } from './store.js';
 
 /**
  * Spiegel des Abspielgeräts. Quelle der Wahrheit sind die Meldungen des Geräts
- * (Mock bzw. in Schritt 2 Spotify), nicht die Absichten der Oberfläche.
+ * (Demo-Gerät bzw. Spotify), nicht die Absichten der Oberfläche.
  *
  * @typedef {Object} Playback
  * @property {RecordItem | null} context   laufende Platte (auch pausiert) oder null

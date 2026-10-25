@@ -5,7 +5,7 @@
 // Sie ist kein Geheimnis: Der Login nutzt PKCE und braucht kein Client Secret.
 // Das Secret gehört NIE in diesen Code.
 
-export const SPOTIFY_CLIENT_ID = '';
+export const SPOTIFY_CLIENT_ID = '2f1744da4c6d42d6a317f6003728c9a7';
 
 /** Berechtigungen, die die App bei Spotify anfragt */
 export const SPOTIFY_SCOPES = [

@@ -1,6 +1,6 @@
 // @ts-check
-// Einziger Ort, der entscheidet, welches Abspielgerät gesteuert wird.
-// Schritt 2: hier Spotify Connect einhängen – Zustand und UI bleiben unverändert.
+// Abspielgerät für die Demo. Das Spotify-Gerät (src/spotify/spotify-device.js)
+// wählt main.js nach der Anmeldung – Zustand und UI sind für beide gleich.
 
 import { createMockDevice } from './mock-device.js';
 

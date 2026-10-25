@@ -4,10 +4,10 @@ Web-App für das iPad, die deine Spotify-Bibliothek als Plattensammlung zeigt un
 später die Spotify-App per **Spotify Connect** steuert. Sie spielt selbst keinen
 Ton ab und läuft als Homescreen-App (PWA) im Vollbild.
 
-**Stand: Menü und Plattenspieler, noch ohne Spotify.** Die Daten sind Mock-Daten
-(je 12 Playlists und Alben, 8 „Zuletzt gehört", Titellisten). Ein simuliertes
-Abspielgerät verhält sich wie Spotify Connect: Es verwaltet Titel, Fortschritt
-und Pause und springt am Titelende weiter. Ton gibt es noch keinen.
+**Stand: mit Spotify verbunden.** Nach der Anmeldung zeigt die App deine
+Playlists, Alben und zuletzt gehörte Platten und steuert die Spotify-App per
+Spotify Connect. Ohne Anmeldung gibt es eine **Demo** mit Beispieldaten und
+einem simulierten Abspielgerät.
 
 ## Starten
 
@@ -31,13 +31,32 @@ Der Server schickt `Cache-Control: no-store`. Safari lädt deshalb nach jeder
 (z. B. `404 /pfad`) und neu verbundene Geräte. So sieht man auch, ob das iPad
 den Server erreicht.
 
+### Spotify einrichten (einmalig)
+
+1. Auf https://developer.spotify.com/dashboard eine App anlegen (**Web API**).
+2. Bei **Redirect URIs** genau die Adressen eintragen, unter denen die App läuft:
+   - `http://127.0.0.1:8080/` für die Entwicklung am Mac
+   - `https://lorenztag.github.io/vinyl-player/` für GitHub Pages bzw. das iPad
+3. Die **Client ID** steht in `src/config.js`. Sie ist kein Geheimnis, denn der
+   Login nutzt PKCE ohne Client Secret. Das Secret gehört nie in den Code.
+4. Im Entwicklermodus braucht der App-Inhaber Spotify Premium. Es dürfen höchstens
+   5 Nutzer zugreifen, weitere Konten unter **User Management** eintragen.
+
+Wichtig für den Login:
+- Am Mac die App über `http://127.0.0.1:8080` öffnen, **nicht** über `localhost`.
+- Über die WLAN-IP (`http://10.…`) geht kein Login, Spotify verlangt dafür HTTPS.
+  Fürs iPad die App über GitHub Pages öffnen.
+- Im eingebauten Browser-Fenster von Claude scheitert Spotifys Login-Seite. Dafür
+  einen normalen Browser nehmen.
+
 ### Auf den Homescreen legen (iPad)
 
 In Safari die Adresse öffnen, dann **Teilen → Zum Home-Bildschirm**. Die App
 startet danach im Vollbild ohne Safari-Leiste.
 
-Zum Testen reicht die WLAN-Adresse. Für den Spotify-Login (Schritt 2) braucht es
-HTTPS, also GitHub Pages (siehe unten).
+Für die Demo reicht die WLAN-Adresse, für Spotify braucht es HTTPS (GitHub
+Pages). Homescreen-App und Safari speichern getrennt: Anmelden musst du dich in
+der installierten App.
 
 ### Testmodi
 
@@ -50,6 +69,8 @@ Fehlerfälle lassen sich per URL-Parameter simulieren:
 | `?mock=flaky` | erster Versuch scheitert, die automatische Wiederholung klappt    |
 | `?mock=empty` | leere Bibliothek                                                  |
 | `?mock=nodevice` | Abspielen scheitert mit „kein aktives Gerät" (Tonarm geht zurück) |
+
+Jeder `?mock=…`-Parameter startet die Demo, unabhängig von einer Anmeldung.
 
 ## Bedienung
 
@@ -83,14 +104,20 @@ manifest.webmanifest    PWA-Manifest
 icons/                  App-Icons (erzeugt von tools/make-icons.py)
 dev-server.py           lokaler Dev-Server (WLAN, ohne Cache)
 src/
-  main.js               verbindet Datenquelle → Zustand → Oberfläche
+  main.js               Start: Spotify oder Demo, Rückkehr vom Login
   data/                 Datenschicht
     types.js            eigene Datentypen (unabhängig vom Spotify-JSON)
     errors.js           einheitliche Fehler (Netz, Timeout, 429, kein Gerät …)
-    source.js           wählt die Datenquelle ← hier kommt in Schritt 2 Spotify rein
+    source.js           Demo-Datenquelle wählen (Spotify-Quelle: src/spotify/)
     mock-source.js      Mock-Daten inkl. Titellisten und simulierter Fehler
+  config.js             Spotify Client ID, Berechtigungen, Redirect-URI
+  spotify/              Spotify-Anbindung
+    auth.js             Login (PKCE), Token-Erneuerung
+    api.js              HTTP-Schicht: Timeout, 401, 429, Wiederholungen, Fehler
+    spotify-source.js   Bibliothek und Titellisten → eigene Datentypen
+    spotify-device.js   Spotify Connect: abspielen, pausieren, Status-Abfrage
   playback/             Abspielgerät
-    device.js           wählt das Gerät ← hier kommt in Schritt 2 Spotify Connect rein
+    device.js           Demo-Gerät wählen (Spotify-Gerät: src/spotify/)
     mock-device.js      simuliertes Gerät (Titel, Fortschritt, Pause, Weiter)
   state/                Zustand
     store.js            minimaler Store (set/subscribe)
@@ -136,26 +163,25 @@ echte Cover. Lädt das Bild nicht, erscheint wieder das Platzhalter-Cover.
 - Noch kein Service Worker, damit während der Entwicklung keine alte Version im
   Cache hängen bleibt. Er kommt mit versioniertem Cache vor dem Deploy.
 
-## Ausblick: Schritt 2 (Spotify)
+## Spotify: Verhalten und Grenzen
 
-Vorbereitet, aber noch nicht gebaut:
-
-- Login per Authorization Code Flow mit PKCE. Es gibt kein Client-Secret, also
-  nichts Geheimes im Repo.
-- Ein zentraler HTTP-Wrapper übernimmt:
-  - Timeout für jede Anfrage
-  - 401: einmalige Token-Erneuerung, auch wenn mehrere Anfragen gleichzeitig scheitern
-  - 429: die Wartezeit aus `Retry-After` einhalten
-  - Netz- und 5xx-Fehler: erneut versuchen mit wachsender Pause
-  - typisierte Fehler (`src/data/errors.js`)
-- Geplant für „Kein aktives Gerät": ein Button „Spotify öffnen", der die App
-  aufweckt, danach wird die Wiedergabe aufs iPad übertragen.
-
-Wichtig dafür:
-
-- Spotify akzeptiert als Redirect-URI nur HTTPS oder `http://127.0.0.1`. Der Login
-  funktioniert also auf dem Mac über 127.0.0.1 und auf dem iPad über GitHub Pages,
-  **nicht** über die WLAN-IP.
-- Homescreen-App und Safari haben auf iOS getrennten Speicher. Anmelden muss man
-  sich deshalb in der installierten App.
-- Die Steuerung über die Web API erfordert Spotify Premium.
+- **Wiedergabe:** Abgespielt wird auf dem aktiven Spotify-Gerät, sonst auf einem
+  iPad/Tablet, sonst auf dem ersten verfügbaren Gerät.
+- **Eingefrorene Spotify-App:** iOS friert die Spotify-App im Hintergrund ein, sie
+  verschwindet dann aus der Geräteliste. Die App zeigt dafür **Spotify öffnen**.
+  Nach der Rückkehr wird der Befehl einmal automatisch wiederholt.
+- **Wiedergabe von anderswo:** Was auf einem anderen Gerät oder vor dem Neuladen
+  gestartet wurde, erkennt die App und zeigt es im Mini-Player an.
+- **Titellisten fremder Playlists:** Spotify gibt sie seit 2026 nur noch für eigene
+  oder gemeinsame Playlists heraus. Fremde Playlists werden trotzdem abgespielt,
+  der Tonarm wählt den Titel dann über die Position.
+- **Einpacken:** Spotify kennt kein Stopp. Beim Einpacken wird pausiert und die
+  Platte ausgeblendet, bis wieder etwas läuft.
+- **Status-Abfrage:** Spotify meldet keine Änderungen von selbst. Die App fragt
+  deshalb alle 3 s nach (pausiert alle 8 s), aber nur, solange sie sichtbar ist.
+- **Fehlerbehandlung:** zentral in `src/spotify/api.js`.
+  - Jede Anfrage hat ein Timeout.
+  - Bei 401 wird das Token einmal erneuert.
+  - Bei 429 hält die App die Wartezeit ein.
+  - Bei Netzfehlern wird erneut versucht, aber nur bei Leseanfragen. Befehle wie
+    „Weiter“ werden nie blind wiederholt.
