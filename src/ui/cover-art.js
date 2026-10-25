@@ -180,9 +180,10 @@ export function jitter(record, salt) {
 
 /**
  * @param {RecordItem} record
+ * @param {{ eager?: boolean }} [opts]  eager: Bild sofort laden (Plattenspieler)
  * @returns {HTMLDivElement}
  */
-export function createCover(record) {
+export function createCover(record, { eager = false } = {}) {
   const { hash, palette, pattern } = styleFor(record);
   const random = seededRandom(hash);
 
@@ -208,11 +209,14 @@ export function createCover(record) {
   if (record.imageUrl) {
     const img = h('img', {
       class: 'cover__img',
-      src: record.imageUrl,
+      // Gleicher Abrufmodus wie beim Farben-Auslesen → nur ein Download, gemeinsamer Cache.
+      // (vor src setzen, sonst startet der Abruf zweimal)
+      crossorigin: 'anonymous',
       alt: '',
-      loading: 'lazy',
+      loading: eager ? 'eager' : 'lazy',
       decoding: 'async',
       draggable: 'false',
+      src: record.imageUrl,
     });
     // Bild nicht ladbar (offline, abgelaufene URL): Platzhalter mit Titel zeigen.
     img.addEventListener('error', () => {

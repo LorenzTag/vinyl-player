@@ -6,6 +6,16 @@
    Maße: --S = Hüllengröße. Die Platte gleitet um (--out-x, --out-y) × --S
    aus der Hülle: im Querformat nach rechts, im Hochformat nach unten. */
 
+/* Farben von Vinyl und Etikett als echte Farb-Variablen registrieren – so
+   gleiten sie beim Liedwechsel weich ineinander (iPadOS 16.4+; ältere
+   Geräte wechseln einfach direkt). */
+@property --vinyl { syntax: "<color>"; inherits: true; initial-value: #0c0a09; }
+@property --vinyl-rim { syntax: "<color>"; inherits: true; initial-value: #1c1916; }
+@property --vinyl-runout { syntax: "<color>"; inherits: true; initial-value: #0d0b0a; }
+@property --label-color { syntax: "<color>"; inherits: true; initial-value: #c9a063; }
+@property --label-ink { syntax: "<color>"; inherits: true; initial-value: #2a2018; }
+@property --label-ring { syntax: "<color>"; inherits: true; initial-value: rgb(0 0 0 / 0.2); }
+
 .player-layer {
   position: fixed;
   inset: 0;
@@ -89,6 +99,13 @@
   width: var(--S);
   height: var(--S);
   transform-origin: 0 0;
+  transition:
+    --vinyl 900ms ease-in-out,
+    --vinyl-rim 900ms ease-in-out,
+    --vinyl-runout 900ms ease-in-out,
+    --label-color 900ms ease-in-out,
+    --label-ink 900ms ease-in-out,
+    --label-ring 900ms ease-in-out;
 }
 
 /* Hülle = Rahmen mit Schräglage; darin die Cover-Karte(n), die beim
@@ -161,10 +178,6 @@
 .record__label {
   position: absolute;
   inset: 32%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
   border-radius: 50%;
   container-type: inline-size;
   background:
@@ -175,29 +188,48 @@
   text-align: center;
 }
 
+.record__label-text {
+  position: absolute;
+  inset: 0;
+}
+
+/* Titel oberhalb, Künstler unterhalb des Mittellochs. Beide Felder liegen in
+   einem Quadrat innerhalb des inneren Rings – Text kann nie auf die Rillen
+   ragen. Die Schriftgröße passt record-player.js an die Textlänge an. */
 .record__label-title {
-  max-width: 70%;
-  margin-top: -26%;
+  position: absolute;
+  left: 20%;
+  right: 20%;
+  bottom: 55%;
+  max-height: 25%;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
   overflow: hidden;
   font-family: var(--font-serif);
-  font-size: 9.5cqw;
+  font-size: 9cqw;
   font-weight: 700;
-  line-height: 1.1;
-  white-space: nowrap;
-  text-overflow: ellipsis;
+  line-height: 1.08;
+  overflow-wrap: anywhere;
 }
 
 .record__label-sub {
-  max-width: 64%;
-  margin-top: 30%;
+  position: absolute;
+  left: 22%;
+  right: 22%;
+  top: 57%;
+  max-height: 21%;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
   overflow: hidden;
-  font-size: 6.5cqw;
+  font-size: 5.5cqw;
   font-weight: 600;
-  letter-spacing: 0.1em;
+  line-height: 1.15;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  opacity: 0.8;
+  overflow-wrap: anywhere;
+  opacity: 0.85;
 }
 
 /* Lichtreflex: steht still, während sich die Rillen drehen */

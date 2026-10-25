@@ -4,6 +4,7 @@
 
 import { h } from './dom.js';
 import { createCover, jitter } from './cover-art.js';
+import { loadImage, paletteFromImage } from './cover-colors.js';
 import { accessibleName, metaLine } from './format.js';
 
 /** @typedef {import('../state/app-state.js').DisplayItem} DisplayItem */
@@ -91,6 +92,16 @@ export function createShelfView({ onOpen }) {
     if (anchor) scrollToKey(anchor);
   });
   resizeObserver.observe(root);
+
+  // Beim Berühren schon Cover und Farben laden – der Plattenspieler startet dann ohne Nachladen.
+  cabinet.addEventListener('pointerdown', (event) => {
+    const button = /** @type {HTMLElement | null} */ (/** @type {Element} */ (event.target).closest('.shelf-item'));
+    const url = button && byKey.get(button.dataset.key ?? '')?.record.imageUrl;
+    if (url) {
+      loadImage(url);
+      paletteFromImage(url);
+    }
+  });
 
   cabinet.addEventListener('click', (event) => {
     const button = /** @type {HTMLElement | null} */ (/** @type {Element} */ (event.target).closest('.shelf-item'));

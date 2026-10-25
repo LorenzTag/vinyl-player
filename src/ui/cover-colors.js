@@ -85,19 +85,97 @@ export function playerTheme(record, palette = coverPalette(record)) {
   };
 }
 
+const IMAGE_TIMEOUT_MS = 8000;
+/** @type {Map<string, Promise<HTMLImageElement | null>>} */
+const images = new Map();
+/** @type {Map<string, Promise<Palette | null>>} */
+const palettes = new Map();
+/** bereits gelesene Paletten – sofort verfügbar, ohne zu warten */
+/** @type {Map<string, Palette>} */
+const resolvedPalettes = new Map();
+
+/** Palette, falls schon gelesen (sonst null). @param {string} url */
+export function cachedPalette(url) {
+  return resolvedPalettes.get(url) ?? null;
+}
+
 /**
- * Palette aus einem echten Cover lesen: Durchschnitt als Grundfarbe, die
- * kräftigsten Farben als Akzente.
+ * Neutrale Farben (Nussholz, schwarzes Vinyl) – solange die echten Cover-Farben
+ * noch nicht gelesen sind. Besser als zufällige Ersatzfarben, die gleich wieder
+ * umspringen.
+ * @param {RecordItem} record
+ */
+export function neutralTheme(record) {
+  return playerTheme(record, { bg: '#5a4030', a: '#141110', b: '#c9a063', ink: '#f2e6d0' });
+}
+
+/**
+ * Bild laden und dekodieren (einmal je URL, danach aus dem Cache).
+ * @param {string} url
+ * @returns {Promise<HTMLImageElement | null>}
+ */
+export function loadImage(url) {
+  let task = images.get(url);
+  if (!task) {
+    task = new Promise((resolve) => {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.decoding = 'async';
+      const done = (/** @type {HTMLImageElement | null} */ result) => {
+        clearTimeout(timer);
+        img.onload = img.onerror = null;
+        if (!result) images.delete(url); // später erneut versuchen
+        resolve(result);
+      };
+      // Feste Zeitgrenze: ein hängender Abruf darf den Cache nie blockieren.
+      const timer = setTimeout(() => done(null), IMAGE_TIMEOUT_MS);
+      img.onload = () => done(img);
+      img.onerror = () => done(null);
+      img.src = url;
+    });
+    images.set(url, task);
+  }
+  return task;
+}
+
+/**
+ * Auf ein Ergebnis höchstens `ms` warten, danach null (die Oberfläche wartet nie ewig).
+ * @template T
+ * @param {Promise<T>} promise
+ * @param {number} ms
+ * @returns {Promise<T | null>}
+ */
+export function within(promise, ms) {
+  return Promise.race([promise, new Promise((resolve) => setTimeout(() => resolve(null), ms))]);
+}
+
+/**
+ * Palette aus einem echten Cover lesen (zwischengespeichert): Durchschnitt als
+ * Grundfarbe, die kräftigsten Farben als Akzente.
  * @param {string} url
  * @returns {Promise<Palette | null>}
  */
-export async function paletteFromImage(url) {
+export function paletteFromImage(url) {
+  let task = palettes.get(url);
+  if (!task) {
+    task = readPalette(url);
+    palettes.set(url, task);
+    task.then((p) => {
+      if (p) resolvedPalettes.set(url, p);
+      else palettes.delete(url);
+    });
+  }
+  return task;
+}
+
+/**
+ * @param {string} url
+ * @returns {Promise<Palette | null>}
+ */
+async function readPalette(url) {
   try {
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.decoding = 'async';
-    img.src = url;
-    await img.decode();
+    const img = await loadImage(url);
+    if (!img) return null;
     const size = 24;
     const canvas = document.createElement('canvas');
     canvas.width = canvas.height = size;

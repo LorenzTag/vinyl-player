@@ -60,6 +60,7 @@
   transform-origin: 50% 50%;
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
+  will-change: transform, opacity; /* eigene Ebene von Anfang an – kein Ruckler beim ersten Bewegen */
 }
 
 .crate-item > .cover {
@@ -127,17 +128,6 @@
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--brass-500);
-}
-
-.crate__caption.is-changing > * {
-  animation: caption-in 240ms var(--ease-out) both;
-}
-
-@keyframes caption-in {
-  from {
-    opacity: 0.2;
-    transform: translateY(4px);
-  }
 }
 
 /* Position in der Sammlung, z. B. „3 / 12" */

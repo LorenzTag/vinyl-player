@@ -17,7 +17,7 @@
 
 import { h, svg, clamp, prefersReducedMotion } from './dom.js';
 import { createCover } from './cover-art.js';
-import { playerTheme, paletteFromImage } from './cover-colors.js';
+import { playerTheme, paletteFromImage, cachedPalette, neutralTheme, loadImage, within } from './cover-colors.js';
 import { formatDuration } from './format.js';
 import { createTonearm } from './tonearm.js';
 import { createTracklist } from './tracklist.js';
@@ -94,19 +94,44 @@ function isUsable(rect) {
 }
 
 /**
+ * Was Hülle und Etikett zeigen: die Platte selbst oder ein Lied.
+ * @typedef {{ key: string, cover: RecordItem, title: string, artist: string }} Display
+ */
+
+/**
  * Welches Cover gehört zu diesem Lied? Echtes Album-Cover, bei Alben das
- * Album selbst, sonst ein eigenes generiertes Cover je Lied.
+ * Album selbst, sonst ein eigenes generiertes Cover je Lied. Gleiches Bild =
+ * gleicher Schlüssel → kein unnötiger Wechsel (z. B. Lieder eines Albums).
  * @param {RecordItem} record
  * @param {Track | null | undefined} track
- * @returns {RecordItem}
+ * @returns {Display}
  */
-function coverRecordFor(record, track) {
-  if (!track) return record;
-  if (track.imageUrl) {
-    return { ...record, id: `${track.id}:cover`, title: track.title, subtitle: track.artists, kind: 'album', imageUrl: track.imageUrl };
+function displayFor(record, track) {
+  /** @type {RecordItem} */
+  let cover = record;
+  if (track?.imageUrl) {
+    cover = { ...record, id: `${track.id}:cover`, title: track.title, subtitle: track.artists, kind: 'album', imageUrl: track.imageUrl };
+  } else if (track && record.kind !== 'album') {
+    cover = { ...record, id: `${track.id}:cover`, title: track.title, subtitle: track.artists, kind: 'album', imageUrl: null };
   }
-  if (record.kind === 'album') return record;
-  return { ...record, id: `${track.id}:cover`, title: track.title, subtitle: track.artists, kind: 'album', imageUrl: null };
+  return {
+    key: cover.imageUrl ? `img:${cover.imageUrl}` : `gen:${cover.id}`,
+    cover,
+    title: track?.title ?? record.title,
+    artist: track?.artists ?? record.subtitle,
+  };
+}
+
+/**
+ * Schriftgröße des Etiketts nach Textlänge – damit nichts über den Rand auf die
+ * Rillen ragt (Text liegt zusätzlich in einem Quadrat innerhalb des Kreises).
+ * @param {string} text
+ * @param {number[]} sizes  cqw-Größen von kurz bis lang
+ * @param {number[]} limits Zeichengrenzen
+ */
+function labelSize(text, sizes, limits) {
+  const i = limits.findIndex((limit) => text.length <= limit);
+  return `${sizes[i === -1 ? sizes.length - 1 : i]}cqw`;
 }
 
 /**
@@ -208,8 +233,8 @@ export function createRecordPlayer({ store, playback, onRequestClose }) {
   let coverLocked = true;
   /** Titelliste: 0 = zu, 1 = offen */
   let listProgress = 0;
-  /** Richtung des letzten Liedwechsels per Geste (für die Cover-Animation) */
-  let swipeDirection = 0;
+  /** Wurde bei einer nicht laufenden Platte schon ein Lied gewählt? (sonst zeigt die Hülle die Platte) */
+  let browsing = false;
 
   /** Selbst gestartete, noch laufende Animationen */
   /** @type {Set<Animation>} */
@@ -257,11 +282,12 @@ export function createRecordPlayer({ store, playback, onRequestClose }) {
   function build(item) {
     const { record } = item;
 
-    const labelTitle = h('div', { class: 'record__label-title' }, record.title);
-    const labelSub = h('div', { class: 'record__label-sub' }, record.subtitle);
-    const spinEl = h('div', { class: 'record__spin' }, h('div', { class: 'record__label' }, labelTitle, labelSub));
+    const labelTitle = h('div', { class: 'record__label-title' });
+    const labelSub = h('div', { class: 'record__label-sub' });
+    const labelText = h('div', { class: 'record__label-text' }, labelTitle, labelSub);
+    const spinEl = h('div', { class: 'record__spin' }, h('div', { class: 'record__label' }, labelText));
     const disc = h('div', { class: 'record__disc', 'aria-hidden': 'true' }, spinEl, h('div', { class: 'record__sheen' }));
-    const coverCard = h('div', { class: 'record__cover' }, createCover(record));
+    const coverCard = h('div', { class: 'record__cover' }, createCover(record, { eager: true }));
     const sleeve = h('div', { class: 'record__sleeve' }, coverCard);
     const recordEl = h('div', { class: 'record' }, disc, sleeve);
     const platter = h('div', { class: 'platter', 'aria-hidden': 'true' });
@@ -304,70 +330,157 @@ export function createRecordPlayer({ store, playback, onRequestClose }) {
 
     return {
       record: recordEl, disc, sleeve, coverCard, platter, tonearm, deck, stage, bar, player, backdrop,
-      labelTitle, labelSub, status, wake, progressFill, toggle, prev, next, tracklist, toast,
+      labelTitle, labelSub, labelText, status, wake, progressFill, toggle, prev, next, tracklist, toast,
       spin: createSpin(spinEl),
-      /** @type {string} Cover, das gerade gezeigt wird */
-      coverId: record.id,
+      /** Ziel-Cover (Schlüssel aus displayFor), auch während es noch lädt */
+      coverKey: displayFor(record, null).key,
+      /** Text auf dem Etikett */
+      /** @type {string | null} */
+      labelKey: null,
     };
   }
 
   // ---------- Farben und Cover ----------
 
   /**
-   * Farben übernehmen. Der Hintergrund blendet weich über (neue Ebene), das
-   * Vinyl wechselt direkt.
-   * @param {RecordItem} coverRecord
+   * Farben setzen: Vinyl und Etikett gleiten per CSS-Übergang (registrierte
+   * Farb-Variablen), der Hintergrund blendet als neue Ebene weich über.
+   * @param {NonNullable<typeof current>} parts
+   * @param {Record<string, string>} vars
    * @param {boolean} fade
    */
-  function applyTheme(coverRecord, fade) {
-    if (!current) return;
-    const parts = current;
-    const apply = (/** @type {Record<string, string>} */ vars) => {
-      if (!current || current !== parts) return;
-      for (const [name, value] of Object.entries(vars)) parts.record.style.setProperty(name, value);
-      const next = h('div', { class: 'player-layer__backdrop' });
-      for (const [name, value] of Object.entries(vars)) next.style.setProperty(name, value);
-      const old = parts.backdrop;
-      old.after(next);
-      parts.backdrop = next;
-      if (fade && !prefersReducedMotion()) {
-        const anim = animate(next, { opacity: [0, 1] }, { duration: 700, easing: 'ease-out' });
-        settle([anim]).then(() => old.remove());
-      } else {
-        old.remove();
-      }
-    };
-    apply(playerTheme(coverRecord));
-    if (coverRecord.imageUrl) {
-      paletteFromImage(coverRecord.imageUrl).then((palette) => {
-        if (palette && current?.coverId === coverRecord.id) apply(playerTheme(coverRecord, palette));
-      });
+  function setTheme(parts, vars, fade) {
+    if (current !== parts) return;
+    for (const [name, value] of Object.entries(vars)) parts.record.style.setProperty(name, value);
+    if (!fade || prefersReducedMotion()) {
+      // Ohne Überblenden: Farben direkt auf die vorhandene Ebene.
+      for (const [name, value] of Object.entries(vars)) parts.backdrop.style.setProperty(name, value);
+      return;
     }
+    const next = h('div', { class: 'player-layer__backdrop' });
+    for (const [name, value] of Object.entries(vars)) next.style.setProperty(name, value);
+    const old = parts.backdrop;
+    old.after(next);
+    parts.backdrop = next;
+    settle([animate(next, { opacity: [0, 1] }, { duration: 900, easing: 'ease-in-out' })]).then(() => old.remove());
   }
 
   /**
-   * Cover auf der Hülle wechseln: altes gleitet weg, neues kommt nach.
-   * @param {RecordItem} coverRecord
-   * @param {number} direction  1 = nächstes (nach oben), -1 = vorheriges, 0 = überblenden
+   * Farben eines Covers. Bei echten Bildern erst, wenn sie gelesen sind –
+   * null heißt: bisherige Farben behalten (nie zufällige Zwischenfarben).
+   * @param {RecordItem} cover
    */
-  function showCover(coverRecord, direction) {
-    if (!current || current.coverId === coverRecord.id) return;
-    const parts = current;
-    parts.coverId = coverRecord.id;
-    const old = parts.coverCard;
-    const card = h('div', { class: 'record__cover' }, createCover(coverRecord));
-    old.after(card);
-    parts.coverCard = card;
-    applyTheme(coverRecord, true);
-    if (prefersReducedMotion()) {
-      old.remove();
+  async function themeFor(cover) {
+    if (!cover.imageUrl) return playerTheme(cover);
+    const palette = await within(paletteFromImage(cover.imageUrl), 1500);
+    return palette ? playerTheme(cover, palette) : null;
+  }
+
+  /** Bild und Farben schon mal laden (z. B. für die Nachbar-Lieder). */
+  function prefetch(/** @type {Display | null} */ display) {
+    const url = display?.cover.imageUrl;
+    if (!url) return;
+    loadImage(url);
+    paletteFromImage(url);
+  }
+
+  /** Etikett-Text wechseln: kurz aus-, dann einblenden. */
+  function showLabel(/** @type {NonNullable<typeof current>} */ parts, /** @type {Display} */ display) {
+    const key = `${display.title}\n${display.artist}`;
+    if (parts.labelKey === key) return;
+    const first = parts.labelKey === null;
+    parts.labelKey = key;
+    const apply = () => {
+      parts.labelTitle.textContent = display.title;
+      parts.labelSub.textContent = display.artist;
+      parts.labelTitle.style.fontSize = labelSize(display.title, [12, 10, 8.4, 7.2, 6.2], [8, 14, 22, 32]);
+      parts.labelSub.style.fontSize = labelSize(display.artist, [6, 5.2, 4.6], [16, 28]);
+    };
+    if (first || prefersReducedMotion()) {
+      apply();
       return;
     }
-    const shift = direction * 55;
-    settle([
-      animate(old, { transform: [old.style.transform || 'none', `translateY(${-shift}%) scale(0.92)`], opacity: [1, 0] }, { duration: 360, easing: EASE_IN_OUT }),
-      animate(card, { transform: [`translateY(${shift}%) scale(0.92)`, 'none'], opacity: [0, 1] }, { duration: 420, easing: EASE_OUT }),
-    ]).then(() => old.remove());
+    const out = animate(parts.labelText, { opacity: [1, 0] }, { duration: 140, easing: 'ease-in', fill: 'forwards' });
+    settle([out]).then(() => {
+      if (parts.labelKey !== key) return;
+      apply();
+      animate(parts.labelText, { opacity: [0, 1] }, { duration: 280, easing: 'ease-out' });
+      out.cancel();
+    });
+  }
+
+  let coverSeq = 0;
+
+  /**
+   * Cover auf der Hülle wechseln. Das alte gleitet sofort weg (die Geste
+   * reagiert ohne Wartezeit); das neue kommt erst, wenn Bild und Farben
+   * geladen sind – nichts ploppt nach.
+   * @param {NonNullable<typeof current>} parts
+   * @param {Display} display
+   * @param {number} direction  1 = nächstes (nach oben), -1 = vorheriges, 0 = überblenden
+   */
+  async function changeCover(parts, display, direction) {
+    parts.coverKey = display.key;
+    const seq = ++coverSeq;
+    const reduced = prefersReducedMotion();
+    const old = parts.coverCard;
+    const dir = reduced ? 0 : direction;
+
+    if (dir) {
+      animate(old, {
+        transform: [old.style.transform || 'none', `translateY(${-dir * 78}%) rotate(${-dir * 4}deg) scale(0.86)`],
+        opacity: [1, 0],
+      }, { duration: 340, easing: 'cubic-bezier(0.5, 0, 0.75, 0)', fill: 'forwards' });
+    }
+
+    const [, theme] = await Promise.all([
+      display.cover.imageUrl ? within(loadImage(display.cover.imageUrl), 2500) : null,
+      themeFor(display.cover),
+    ]);
+    if (seq !== coverSeq || current !== parts) return;
+
+    const card = h('div', { class: 'record__cover' }, createCover(display.cover, { eager: true }));
+    old.after(card);
+    parts.coverCard = card;
+    if (theme) setTheme(parts, theme, true);
+    const stale = [...parts.sleeve.querySelectorAll('.record__cover')].filter((c) => c !== card);
+    if (reduced) {
+      stale.forEach((c) => c.remove());
+      return;
+    }
+    /** @type {Animation[]} */
+    const animations = [];
+    if (dir) {
+      animations.push(animate(card, {
+        transform: [`translateY(${dir * 62}%) rotate(${dir * 3}deg) scale(0.88)`, 'none'],
+        opacity: [0, 1],
+      }, { duration: 560, easing: 'cubic-bezier(0.18, 0.9, 0.3, 1.08)' }));
+    } else {
+      animations.push(animate(card, { transform: ['scale(1.05)', 'none'], opacity: [0, 1] }, { duration: 700, easing: EASE_OUT }));
+      for (const c of stale) animations.push(animate(c, { opacity: [1, 0] }, { duration: 700, easing: 'ease-in-out', fill: 'forwards' }));
+    }
+    await settle(animations);
+    stale.forEach((c) => c.remove());
+  }
+
+  /**
+   * Hülle und Etikett auf ein Lied (oder die Platte) einstellen.
+   * @param {Display} display
+   * @param {number} direction
+   */
+  function show(display, direction) {
+    if (!current) return;
+    showLabel(current, display);
+    if (current.coverKey !== display.key) changeCover(current, display, direction);
+    else if (direction) bounceCover(direction); // gleiches Cover (z. B. Album): kurz nicken
+  }
+
+  /** Richtung des zuletzt gewünschten Wechsels – gilt höchstens 4 s. */
+  let intent = { direction: 0, until: 0 };
+  function takeDirection() {
+    const direction = Date.now() < intent.until ? intent.direction : 0;
+    intent = { direction: 0, until: 0 };
+    return direction;
   }
 
   // ---------- Darstellung aus dem Zustand ----------
@@ -394,8 +507,8 @@ export function createRecordPlayer({ store, playback, onRequestClose }) {
     const list = state.tracklists[record.id];
     const tracks = isCurrent ? pb.tracks : list?.items ?? [];
     if (!isCurrent) selectedIndex = clamp(selectedIndex, 0, Math.max(0, tracks.length - 1));
-    const index = isCurrent ? pb.index : tracks.length ? selectedIndex : -1;
-    const track = isCurrent ? tracks[index] ?? pb.track : tracks[index] ?? null;
+    const index = isCurrent ? pb.index : browsing && tracks.length ? selectedIndex : -1;
+    const track = isCurrent ? tracks[index] ?? pb.track : browsing ? tracks[selectedIndex] ?? null : null;
     const playing = isCurrent && pb.playing;
     const count = tracks.length || record.trackCount;
     view = { isCurrent, playing, tracks, index, track, count };
@@ -404,12 +517,18 @@ export function createRecordPlayer({ store, playback, onRequestClose }) {
     if (!armHold) current.tonearm.setState({ on: playing, progress: recordProgress(pb) });
     current.spin.set(playing);
 
-    // Etikett und Cover zeigen das Lied
-    current.labelTitle.textContent = track?.title ?? record.title;
-    current.labelSub.textContent = track?.artists ?? record.subtitle;
+    // Etikett und Cover zeigen das Lied (bzw. die Platte, solange nichts gewählt ist)
+    const display = displayFor(record, track);
     if (!coverLocked) {
-      showCover(coverRecordFor(record, track), swipeDirection);
-      swipeDirection = 0;
+      const direction = current.coverKey !== display.key || current.labelKey !== `${display.title}\n${display.artist}` ? takeDirection() : 0;
+      show(display, direction);
+      // Nachbar-Lieder vorladen, damit der nächste Wisch sofort sitzt
+      if (index >= 0) {
+        prefetch(tracks[index + 1] ? displayFor(record, tracks[index + 1]) : null);
+        prefetch(tracks[index - 1] ? displayFor(record, tracks[index - 1]) : null);
+      }
+    } else {
+      showLabel(current, displayFor(record, null));
     }
 
     // Leiste (nur das Nötigste – Titel steht auf der Platte)
@@ -481,7 +600,7 @@ export function createRecordPlayer({ store, playback, onRequestClose }) {
       return;
     }
     armHold = true;
-    playback.dropNeedle(record, selectedIndex).finally(() => {
+    playback.dropNeedle(record, browsing ? selectedIndex : 0).finally(() => {
       armHold = false;
       render(store.get());
     });
@@ -492,7 +611,7 @@ export function createRecordPlayer({ store, playback, onRequestClose }) {
     const { record } = current.item;
     if (view.playing) playback.pause();
     else if (playback.isContext(record)) playback.resume();
-    else playback.playRecord(record, selectedIndex);
+    else playback.playRecord(record, browsing ? selectedIndex : 0);
   }
 
   /**
@@ -502,38 +621,47 @@ export function createRecordPlayer({ store, playback, onRequestClose }) {
    */
   function changeSong(direction) {
     if (!current) return;
-    swipeDirection = direction;
+    intent = { direction, until: Date.now() + 4000 };
     if (view.isCurrent) {
       if (direction > 0) playback.next();
       else playback.previous();
       return;
     }
-    if (!view.tracks.length) {
-      swipeDirection = 0;
+    const { tracks } = view;
+    const loaded = store.get().tracklists[current.item.record.id]?.items ?? tracks;
+    if (!loaded.length) {
+      intent = { direction: 0, until: 0 };
+      bounceCover(direction);
       showToast('Für diese Platte gibt es keine Titelliste – Nadel auflegen zum Abspielen.');
       return;
     }
-    const nextIndex = clamp(selectedIndex + direction, 0, view.tracks.length - 1);
-    if (nextIndex === selectedIndex) {
-      swipeDirection = 0;
+    // Erster Wisch zeigt das erste Lied, danach geht es Lied für Lied.
+    const nextIndex = browsing ? clamp(selectedIndex + direction, 0, loaded.length - 1) : 0;
+    if (browsing && nextIndex === selectedIndex) {
+      intent = { direction: 0, until: 0 };
       bounceCover(direction);
       return;
     }
+    browsing = true;
     selectedIndex = nextIndex;
     render(store.get());
   }
 
-  /** Am Anfang/Ende der Platte: Cover federt nur kurz. */
+  /** Gleiches Cover oder Ende der Platte: das Cover nickt nur kurz in Wischrichtung. */
   function bounceCover(/** @type {number} */ direction) {
     if (!current || prefersReducedMotion()) return;
-    animate(current.coverCard, { transform: ['none', `translateY(${-direction * 6}%)`, 'none'] }, { duration: 320, easing: EASE_OUT });
+    const card = current.coverCard;
+    const from = card.style.transform || 'none';
+    card.style.transform = '';
+    animate(card, { transform: [from, `translateY(${-direction * 7}%)`, 'none'] }, { duration: 380, easing: EASE_OUT });
   }
 
   /** @param {number} index */
   function selectFromList(index) {
     if (!current) return;
     const { record } = current.item;
-    swipeDirection = index >= view.index ? 1 : -1;
+    intent = { direction: index >= view.index ? 1 : -1, until: Date.now() + 4000 };
+    browsing = true;
     selectedIndex = index;
     setList(false);
     playback.playRecord(record, index);
@@ -714,14 +842,17 @@ export function createRecordPlayer({ store, playback, onRequestClose }) {
 
     if (g.mode === 'vertical') {
       const card = current.coverCard;
-      const from = card.style.transform;
-      card.style.transform = '';
       const up = dy < -SWIPE_DISTANCE || (dy < -20 && vy < -FLICK_SPEED);
       const down = dy > SWIPE_DISTANCE || (dy > 20 && vy > FLICK_SPEED);
-      if (!cancelled && (up || down)) {
-        changeSong(up ? 1 : -1);
-      } else if (from && !prefersReducedMotion()) {
-        animate(card, { transform: [from, 'none'] }, { duration: 260, easing: EASE_OUT });
+      const keyBefore = current.coverKey;
+      // Wechsel auslösen, solange die Karte noch am Finger hängt – das alte
+      // Cover fliegt dann direkt von dort weiter.
+      if (!cancelled && (up || down)) changeSong(up ? 1 : -1);
+      if (current && current.coverCard === card && current.coverKey === keyBefore && card.style.transform) {
+        // Kein (sofortiger) Cover-Wechsel: Karte zurückfedern lassen.
+        const from = card.style.transform;
+        card.style.transform = '';
+        if (!prefersReducedMotion()) animate(card, { transform: [from, 'none'] }, { duration: 300, easing: EASE_OUT });
       }
     }
   }
@@ -785,10 +916,19 @@ export function createRecordPlayer({ store, playback, onRequestClose }) {
     current = { item, button, ...parts };
     shownError = store.get().playback.error; // alte Fehler nicht erneut melden
     selectedIndex = 0;
+    browsing = false;
     listProgress = 0;
-    swipeDirection = 0;
+    intent = { direction: 0, until: 0 };
     coverLocked = true; // erst das Platten-Cover zeigen, damit der Flug passt
-    applyTheme(item.record, false);
+    // Farben: sofort, falls schon bekannt; sonst neutral und weich zu den echten.
+    const { record } = item;
+    const known = record.imageUrl ? cachedPalette(record.imageUrl) : null;
+    setTheme(current, record.imageUrl ? (known ? playerTheme(record, known) : neutralTheme(record)) : playerTheme(record), false);
+    if (record.imageUrl && !known) {
+      themeFor(record).then((vars) => {
+        if (vars && current?.item === item && current.coverKey === displayFor(record, null).key) setTheme(current, vars, true);
+      });
+    }
     layer.hidden = false;
     placeList(0, false);
     playback.loadTracks(item.record).catch(() => {}); // Fehler zeigt die Titelliste
@@ -854,9 +994,10 @@ export function createRecordPlayer({ store, playback, onRequestClose }) {
     gesture = null;
     if (listProgress > 0) setList(false);
     // Für den Rückflug wieder das Cover der Platte zeigen (passt zur Hülle im Regal).
-    coverLocked = false;
-    showCover(parts.item.record, 0);
     coverLocked = true;
+    const home = displayFor(parts.item.record, null);
+    showLabel(parts, home);
+    if (parts.coverKey !== home.key) changeCover(parts, home, 0);
 
     try {
       const target = sleeve?.isConnected ? sleeve.getBoundingClientRect() : null;
@@ -878,13 +1019,15 @@ export function createRecordPlayer({ store, playback, onRequestClose }) {
         const to = parts.record.getBoundingClientRect();
         parts.record.classList.remove('is-tilted');
         parts.record.style.transform = inverse(target, to);
-        parts.backdrop.style.opacity = '0';
+        // Alle Hintergrund-Ebenen ausblenden (auch eine, die gerade noch überblendet).
+        const backdrops = [...layer.querySelectorAll('.player-layer__backdrop')];
+        for (const b of backdrops) /** @type {HTMLElement} */ (b).style.opacity = '0';
         parts.platter.style.opacity = '0';
         await settle([
           animate(parts.sleeve, { transform: [tilt(out.size), 'none'] }, { duration: 440, easing: EASE_IN_OUT }),
           animate(parts.record, { transform: ['none', inverse(target, to)] }, { duration: 440, easing: EASE_IN_OUT }),
           animate(parts.platter, { opacity: [1, 0] }, { duration: 240, easing: 'ease-in' }),
-          animate(parts.backdrop, { opacity: [1, 0] }, { duration: 440, easing: 'ease-in' }),
+          ...backdrops.map((b) => animate(b, { opacity: [1, 0] }, { duration: 440, easing: 'ease-in' })),
         ]);
       }
     } catch (err) {

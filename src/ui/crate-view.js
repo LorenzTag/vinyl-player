@@ -8,6 +8,7 @@
 
 import { h, clamp, prefersReducedMotion } from './dom.js';
 import { createCover } from './cover-art.js';
+import { loadImage, paletteFromImage } from './cover-colors.js';
 import { accessibleName, metaLine } from './format.js';
 
 /** @typedef {import('../state/app-state.js').DisplayItem} DisplayItem */
@@ -28,6 +29,9 @@ const MAX_VELOCITY = 28;  // Platten/s – deckelt Ausreißer bei der Schwungber
  * @property {HTMLButtonElement} el
  * @property {HTMLElement} shade
  * @property {number} z
+ * @property {string} [transform]  zuletzt geschriebene Werte – unveränderte
+ * @property {string} [opacity]    werden nicht erneut gesetzt (spart Stil-Arbeit)
+ * @property {string} [shadeOpacity]
  */
 
 /**
@@ -73,11 +77,14 @@ export function createCrateView({ onOpen }) {
     const p = clamp(d, -1, 1);
     const x = d * SLOT * size + p * PUSH * size;
     const scale = 1 - 0.14 * Math.min(a, 1);
-    entry.el.style.transform =
-      `translate3d(${x.toFixed(2)}px,0,0) perspective(${Math.round(size * 2.6)}px) ` +
+    const transform =
+      `translate3d(${x.toFixed(1)}px,0,0) perspective(${Math.round(size * 2.6)}px) ` +
       `rotateY(${(-p * ANGLE).toFixed(2)}deg) scale(${scale.toFixed(4)})`;
-    entry.el.style.opacity = a > RANGE - 1 ? clamp(RANGE - a, 0, 1).toFixed(3) : '1';
-    entry.shade.style.opacity = Math.min(0.78, Math.min(a, 1) * 0.42 + Math.max(0, a - 1) * 0.07).toFixed(3);
+    const opacity = a > RANGE - 1 ? clamp(RANGE - a, 0, 1).toFixed(2) : '1';
+    const shadeOpacity = Math.min(0.78, Math.min(a, 1) * 0.42 + Math.max(0, a - 1) * 0.07).toFixed(2);
+    if (transform !== entry.transform) entry.el.style.transform = entry.transform = transform;
+    if (opacity !== entry.opacity) entry.el.style.opacity = entry.opacity = opacity;
+    if (shadeOpacity !== entry.shadeOpacity) entry.shade.style.opacity = entry.shadeOpacity = shadeOpacity;
     const z = 1000 - Math.round(a * 10);
     if (z !== entry.z) {
       entry.z = z;
@@ -108,18 +115,31 @@ export function createCrateView({ onOpen }) {
 
   /** @param {number} index */
   function setCenter(index) {
-    const first = centerIndex === -1;
+    const previous = centerIndex;
     centerIndex = index;
     const { item } = entries[index];
     title.textContent = item.record.title;
     subtitle.textContent = item.record.subtitle;
     meta.textContent = metaLine(item);
     count.textContent = `${index + 1} / ${entries.length}`;
-    entries.forEach((e, i) => e.el.setAttribute('aria-current', String(i === index)));
-    if (!first && !prefersReducedMotion()) {
-      caption.classList.remove('is-changing');
-      void caption.offsetWidth; // Animation neu starten
-      caption.classList.add('is-changing');
+    // Nur die zwei betroffenen Hüllen anfassen (nicht alle – das kostet sonst Frames).
+    entries[previous]?.el.setAttribute('aria-current', 'false');
+    entries[index].el.setAttribute('aria-current', 'true');
+    if (previous !== -1 && !prefersReducedMotion()) {
+      // Ohne erzwungenes Layout (kein offsetWidth) – reine opacity/transform-Animation.
+      caption.getAnimations().forEach((a) => a.cancel());
+      caption.animate(
+        { opacity: [0.25, 1], transform: ['translateY(4px)', 'none'] },
+        { duration: 240, easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)' },
+      );
+    }
+    // Cover und Farben der Nachbarn vorladen: Öffnen und Plattenspieler starten ohne Nachladen.
+    for (const i of [index, index + 1, index - 1]) {
+      const url = entries[i]?.item.record.imageUrl;
+      if (url) {
+        loadImage(url);
+        paletteFromImage(url);
+      }
     }
   }
 
@@ -129,7 +149,7 @@ export function createCrateView({ onOpen }) {
    * @param {number} index
    * @param {number} [timeConstant]  s; kleiner = schneller
    */
-  function animateTo(index, timeConstant = 0.14) {
+  function animateTo(index, timeConstant = 0.18) {
     if (!entries.length) return;
     target = clamp(Math.round(index), 0, entries.length - 1);
     tau = prefersReducedMotion() ? 0.05 : timeConstant;
@@ -169,10 +189,13 @@ export function createCrateView({ onOpen }) {
 
   stage.addEventListener('pointermove', (event) => {
     if (!drag || event.pointerId !== drag.id) return;
-    const dx = event.clientX - drag.startX;
+    let dx = event.clientX - drag.startX;
     if (!drag.dragging) {
       if (Math.abs(dx) < DRAG_THRESHOLD) return;
       drag.dragging = true;
+      // Die Schwelle nicht als Sprung nachholen – ab hier folgt der Stapel 1:1.
+      drag.startX += Math.sign(dx) * DRAG_THRESHOLD;
+      dx = event.clientX - drag.startX;
       stage.classList.add('is-dragging');
       try {
         stage.setPointerCapture(event.pointerId);
@@ -211,10 +234,11 @@ export function createCrateView({ onOpen }) {
     const raw = event.type === 'pointercancel' || resting || dt <= 0 ? 0 : -(last.x - firstRecent.x) / dt / (SLOT * size);
     const velocity = clamp(raw, -MAX_VELOCITY, MAX_VELOCITY);
 
-    const projected = pos + velocity * 0.22;
+    // Schwung wie bei iOS: schneller Wisch gleitet weiter, langsamer rastet sanft ein.
+    const projected = pos + velocity * 0.3;
     const destination = clamp(Math.round(projected), 0, entries.length - 1);
     const distance = Math.abs(destination - pos);
-    const timeConstant = Math.abs(velocity) > 0.5 ? clamp(distance / Math.abs(velocity), 0.09, 0.3) : 0.14;
+    const timeConstant = Math.abs(velocity) > 0.5 ? clamp(distance / Math.abs(velocity), 0.12, 0.38) : 0.18;
     animateTo(destination, timeConstant);
   }
 
