@@ -218,8 +218,10 @@ export function createCrateView({ onOpen }) {
     animateTo(destination, timeConstant);
   }
 
-  stage.addEventListener('pointerup', endDrag);
-  stage.addEventListener('pointercancel', endDrag);
+  // Loslassen auch außerhalb der Bühne erkennen (Finger rutscht auf die
+  // Bildunterschrift o. Ä.) – sonst bliebe die Geste hängen.
+  window.addEventListener('pointerup', endDrag, true);
+  window.addEventListener('pointercancel', endDrag, true);
   stage.addEventListener('lostpointercapture', (event) => {
     if (drag && event.pointerId === drag.id && drag.dragging) endDrag(event);
   });
@@ -320,6 +322,8 @@ export function createCrateView({ onOpen }) {
       stopAnimation();
       clearTimeout(wheelTimer);
       resizeObserver.disconnect();
+      window.removeEventListener('pointerup', endDrag, true);
+      window.removeEventListener('pointercancel', endDrag, true);
       root.remove();
     },
   };

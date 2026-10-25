@@ -1,6 +1,6 @@
 // @ts-check
-// Vorschlag A: Plattenregal. Reihen mit Holzbrett, Hüllen frontal, Papier-Etiketten.
-// Spaltenzahl folgt der Breite (Hochformat 3, Querformat 4–5).
+// Vorschlag A: Plattenschrank. Fächer mit Holzboden, Hüllen dicht an dicht,
+// Etiketten als Preisschilder. Spaltenzahl folgt der Breite (Hochformat 4, Querformat 5).
 
 import { h } from './dom.js';
 import { createCover, jitter } from './cover-art.js';
@@ -12,11 +12,11 @@ import { accessibleName, metaLine } from './format.js';
 
 /** @param {number} width */
 function columnsFor(width) {
-  if (width < 520) return 2;
-  if (width < 940) return 3;
-  if (width < 1300) return 4;
-  if (width < 1700) return 5;
-  return 6;
+  if (width < 520) return 3;
+  if (width < 940) return 4;
+  if (width < 1300) return 5;
+  if (width < 1700) return 6;
+  return 7;
 }
 
 /**
@@ -48,8 +48,8 @@ export function createShelfView({ onOpen }) {
       style: {
         'grid-column': column + 1,
         '--i': index,
-        '--tilt': `${(jitter(record, 0x51) * 1.1).toFixed(2)}deg`,
-        '--label-tilt': `${(jitter(record, 0xa7) * 0.9).toFixed(2)}deg`,
+        '--tilt': `${(jitter(record, 0x51) * 0.9).toFixed(2)}deg`,
+        '--label-tilt': `${(jitter(record, 0xa7) * 1.6).toFixed(2)}deg`,
       },
     },
       h('div', { class: 'shelf-item__stand' },
@@ -75,7 +75,9 @@ export function createShelfView({ onOpen }) {
       ));
     }
     cabinet.classList.toggle('no-enter', !animate);
-    cabinet.replaceChildren(...rows);
+    cabinet.replaceChildren(rows.length
+      ? h('div', { class: 'shelf__frame' }, h('div', { class: 'shelf__top tex-board', 'aria-hidden': 'true' }), ...rows)
+      : '');
   }
 
   // Spaltenzahl an die Breite anpassen (Drehen, Split View).

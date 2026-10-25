@@ -1,7 +1,10 @@
-/* Plattenteller-Ebene: Hülle + Schallplatte und (vorerst) der Platzhalter
-   für den Player aus Schritt 2. Endpositionen legt CSS fest; die Animation
-   rechnet nur von der angetippten Hülle dorthin (FLIP), daher passt das
-   Layout auch nach dem Drehen des iPad. */
+/* Plattenteller-Ebene: schräg liegende Hülle, Plattenteller mit Platte,
+   Tonarm und eine Leiste unten. Endpositionen legt CSS fest; die Animation
+   rechnet nur von der angetippten Hülle dorthin (FLIP). Dadurch passt das
+   Layout auch nach dem Drehen des iPad.
+
+   Maße: --S = Hüllengröße. Die Platte gleitet um (--out-x, --out-y) × --S
+   aus der Hülle: im Querformat nach rechts, im Hochformat nach unten. */
 
 .player-layer {
   position: fixed;
@@ -18,54 +21,70 @@
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(ellipse 70% 60% at 35% 45%, rgb(255 214 160 / 0.1), transparent 70%),
-    radial-gradient(ellipse 130% 100% at 50% 50%, transparent 40%, rgb(0 0 0 / 0.6)),
+    radial-gradient(ellipse 60% 55% at 62% 42%, rgb(255 214 160 / 0.1), transparent 70%),
+    radial-gradient(ellipse 130% 100% at 50% 45%, transparent 40%, rgb(0 0 0 / 0.6)),
     var(--tex-grain),
     linear-gradient(180deg, var(--walnut-800), var(--walnut-950));
   background-size: auto, auto, 180px 180px, auto;
 }
 
 .player {
-  --rec: min(36cqw, 56cqh, 460px);
+  --S: min(calc((100cqw - 2 * var(--gutter)) / 2.3), calc(100cqh - 300px), 520px);
+  --out-x: 1.02;
+  --out-y: 0;
   position: absolute;
   inset: 0;
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: center;
-  gap: clamp(24px, 4cqw, 64px);
+  grid-template-rows: minmax(0, 1fr) auto;
   padding:
-    calc(var(--safe-top) + 24px)
+    calc(var(--safe-top) + 16px)
     calc(var(--safe-right) + var(--gutter))
-    calc(var(--safe-bottom) + 24px)
-    calc(var(--safe-left) + var(--gutter) + 2cqw);
+    calc(var(--safe-bottom) + 16px)
+    calc(var(--safe-left) + var(--gutter));
 }
 
 @media (orientation: portrait) {
   .player {
-    --rec: min(52cqw, 40cqh, 460px);
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto auto;
-    align-content: center;
-    justify-items: center;
-    gap: 40px;
+    --S: min(calc((100cqw - 2 * var(--gutter)) / 1.3), calc((100cqh - 280px) / 2.1), 520px);
+    --out-x: 0;
+    --out-y: 1.02;
   }
 }
 
-/* Platz für Hülle plus die herausgezogene Platte */
+.player__stage {
+  display: grid;
+  place-items: center;
+  min-height: 0;
+}
+
+/* Bühne für Hülle, Plattenteller und Tonarm */
 .player__deck {
+  --r: calc(var(--S) * 0.48);                         /* Plattenradius */
+  --cx: calc((0.5 + var(--out-x)) * var(--S));        /* Mitte des Plattentellers */
+  --cy: calc((0.5 + var(--out-y)) * var(--S));
   position: relative;
-  width: calc(var(--rec) * 1.56);
-  height: var(--rec);
+  width: calc(var(--S) * 2.24);
+  height: var(--S);
+  margin-top: calc(var(--S) * 0.22);                  /* Platz für das Gegengewicht */
+}
+
+@media (orientation: portrait) {
+  .player__deck {
+    width: calc(var(--S) * 1.24);
+    height: calc(var(--S) * 2.04);
+    margin-top: 0;
+  }
 }
 
 /* ---------- Hülle + Platte ---------- */
 
 .record {
   position: absolute;
+  z-index: 2;
   top: 0;
   left: 0;
-  width: var(--rec);
-  height: var(--rec);
+  width: var(--S);
+  height: var(--S);
   transform-origin: 0 0;
 }
 
@@ -74,7 +93,13 @@
   inset: 0;
   z-index: 2;
   border-radius: 4px;
-  box-shadow: var(--shadow-sleeve), 12px 10px 30px -8px rgb(0 0 0 / 0.6);
+  box-shadow: var(--shadow-sleeve), 14px 16px 34px -8px rgb(0 0 0 / 0.6);
+  transform-origin: 50% 50%;
+}
+
+/* Schräglage – identisch zu tilt() in record-player.js */
+.record.is-tilted .record__sleeve {
+  transform: perspective(calc(var(--S) * 3.2)) translateX(calc(var(--S) * -0.04)) rotateY(18deg) rotateX(4deg) rotateZ(-5deg);
 }
 
 .record__disc {
@@ -85,7 +110,11 @@
   width: 96%;
   height: 96%;
   border-radius: 50%;
-  box-shadow: 0 14px 34px -6px rgb(0 0 0 / 0.75);
+  box-shadow: 0 10px 26px -6px rgb(0 0 0 / 0.75);
+}
+
+.record.is-out .record__disc {
+  transform: translate(calc(var(--out-x) * var(--S)), calc(var(--out-y) * var(--S)));
 }
 
 .record__spin {
@@ -103,12 +132,6 @@
     radial-gradient(circle closest-side, #0d0b0a 0 43%, #1a1715 43.4% 43.8%, #0d0b0a 44.2% 45%, transparent 45.4%),
     repeating-radial-gradient(circle closest-side, #181513 0 0.5%, #0b0a09 0.5% 1.15%);
   background-color: #0c0a09;
-  animation: spin 1.8s linear infinite;   /* 33⅓ U/min */
-  animation-play-state: paused;
-}
-
-.record.is-playing .record__spin {
-  animation-play-state: running;
 }
 
 .record__label {
@@ -169,62 +192,248 @@
   pointer-events: none;
 }
 
-/* ---------- Platzhalter-Text ---------- */
+/* ---------- Plattenteller ---------- */
 
-.player__info {
+.platter {
+  position: absolute;
+  z-index: 1;
+  left: calc(var(--cx) - var(--r) * 1.07);
+  top: calc(var(--cy) - var(--r) * 1.07);
+  width: calc(var(--r) * 2.14);
+  height: calc(var(--r) * 2.14);
+  border-radius: 50%;
+  background:
+    radial-gradient(circle closest-side, #c9c6c1 0 2.4%, #6f6c68 2.8%, transparent 3.2%),            /* Achse */
+    radial-gradient(circle closest-side, #1b1815 0 92.6%, rgb(0 0 0 / 0.6) 93.2%, transparent 93.8%), /* Gummimatte */
+    conic-gradient(from 10deg, #8d8a86, #dedbd6 12%, #7c7975 25%, #cbc8c3 38%, #7a7773 50%, #d8d5d0 62%, #7b7874 75%, #d1cec9 88%, #8d8a86);
+  box-shadow:
+    0 0 0 1px rgb(0 0 0 / 0.55),
+    0 22px 46px -12px rgb(0 0 0 / 0.75);
+}
+
+/* ---------- Tonarm (Ursprung = Drehpunkt) ---------- */
+
+.tonearm {
+  position: absolute;
+  z-index: 3;
+  left: calc(var(--cx) + var(--r) * 1.25);
+  top: calc(var(--cy) - var(--r) * 1.05);
+  width: 0;
+  height: 0;
+}
+
+.tonearm__base {
+  position: absolute;
+  left: calc(var(--r) * -0.2);
+  top: calc(var(--r) * -0.2);
+  width: calc(var(--r) * 0.4);
+  height: calc(var(--r) * 0.4);
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #f4f1eb, #b3afa8 38%, #67635d 72%, #302e2b);
+  box-shadow:
+    inset 0 -3px 6px rgb(0 0 0 / 0.35),
+    0 8px 18px -4px rgb(0 0 0 / 0.65);
+  pointer-events: none;
+}
+
+.tonearm__base::after {
+  content: "";
+  position: absolute;
+  inset: 30%;
+  border-radius: 50%;
+  background: radial-gradient(circle at 40% 35%, #5a5752, #1c1b19 70%);
+  box-shadow: inset 0 1px 2px rgb(255 255 255 / 0.25);
+}
+
+/* Stütze, auf der der Arm in Ruhelage liegt */
+.tonearm__rest {
+  position: absolute;
+  left: calc(var(--r) * 0.05);
+  top: calc(var(--r) * 1.08);
+  width: calc(var(--r) * 0.1);
+  height: calc(var(--r) * 0.17);
+  border-radius: 4px;
+  background: linear-gradient(90deg, #1a1816, #4a4642 50%, #1a1816);
+  box-shadow: 0 4px 8px rgb(0 0 0 / 0.5);
+}
+
+.tonearm__arm {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+  transform-origin: 0 0;
+  transition: transform 650ms cubic-bezier(0.3, 0.7, 0.25, 1);
+  will-change: transform;
+}
+
+.tonearm__arm.is-instant {
+  transition: none;
+}
+
+.tonearm__weight {
+  position: absolute;
+  left: calc(var(--r) * -0.12);
+  top: calc(var(--r) * -0.44);
+  width: calc(var(--r) * 0.24);
+  height: calc(var(--r) * 0.3);
+  border-radius: 6px;
+  background: linear-gradient(90deg, #121110, #4b4844 42%, #2a2826 62%, #0f0e0d);
+  box-shadow: 0 6px 12px -2px rgb(0 0 0 / 0.55);
+}
+
+.tonearm__tube {
+  position: absolute;
+  left: calc(var(--r) * -0.027);
+  top: calc(var(--r) * 0.04);
+  width: calc(var(--r) * 0.054);
+  height: calc(var(--r) * 1.42);
+  border-radius: 99px;
+  background: linear-gradient(90deg, #6b6863, #f6f3ee 40%, #bcb8b2 62%, #5d5a55);
+  box-shadow: 8px 10px 12px -3px rgb(0 0 0 / 0.45);
+  transition: box-shadow 200ms ease;
+}
+
+/* Tonabnehmer mit Fingerlift */
+.tonearm__head {
+  position: absolute;
+  left: calc(var(--r) * -0.08);
+  top: calc(var(--r) * 1.38);
+  width: calc(var(--r) * 0.17);
+  height: calc(var(--r) * 0.37);
+  border-radius: 4px 4px 7px 7px;
+  background: linear-gradient(90deg, #121110, #3d3a37 50%, #141312);
+  box-shadow: 8px 10px 12px -3px rgb(0 0 0 / 0.5);
+  transform: rotate(-16deg);
+  transform-origin: 50% 0;
+  transition: box-shadow 200ms ease;
+}
+
+.tonearm__head::after {
+  content: "";
+  position: absolute;
+  top: 18%;
+  right: -38%;
+  width: 40%;
+  height: 8%;
+  border-radius: 2px;
+  background: linear-gradient(180deg, #e9e5df, #8d8983);
+}
+
+/* Angehoben (beim Ziehen): größerer Schatten */
+.tonearm.is-lifted .tonearm__tube,
+.tonearm.is-lifted .tonearm__head {
+  box-shadow: 18px 24px 20px -4px rgb(0 0 0 / 0.38);
+}
+
+/* Unsichtbare, große Greiffläche entlang des Arms (≥ 48 px breit) */
+.tonearm__grip {
+  position: absolute;
+  left: calc(max(var(--r) * 0.24, 26px) * -1);
+  top: calc(var(--r) * 0.2);
+  width: max(calc(var(--r) * 0.48), 52px);
+  height: calc(var(--r) * 1.62);
+  border-radius: 999px;
+  touch-action: none;
+  cursor: grab;
+}
+
+.tonearm.is-lifted .tonearm__grip {
+  cursor: grabbing;
+}
+
+/* ---------- Leiste unten ---------- */
+
+.player__bar {
+  justify-self: center;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  width: min(100%, 860px);
+  margin-top: 12px;
+  padding: 10px 12px 10px 10px;
+  border-radius: 22px;
+  background:
+    var(--tex-grain),
+    linear-gradient(180deg, rgb(46 31 21 / 0.94), rgb(20 13 9 / 0.96));
+  background-size: 180px 180px, auto;
+  box-shadow:
+    inset 0 1px 0 rgb(201 160 99 / 0.25),
+    0 14px 32px -10px rgb(0 0 0 / 0.75);
+}
+
+.player__back {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 52px;
+  padding: 0 18px;
+  border-radius: 14px;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+  background: rgb(255 240 220 / 0.08);
+  box-shadow: inset 0 0 0 1px rgb(255 240 220 / 0.12);
+}
+
+.player__back:active,
+.player__toggle:active {
+  transform: scale(0.96);
+}
+
+.player__now {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  gap: 10px;
+  gap: 1px;
   min-width: 0;
-  max-width: 520px;
-}
-
-@media (orientation: portrait) {
-  .player__info {
-    align-items: center;
-    text-align: center;
-  }
-}
-
-.player__eyebrow {
-  font-size: 12.5px;
-  font-weight: 700;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-  color: var(--brass-500);
 }
 
 .player__title {
   margin: 0;
+  overflow: hidden;
   font-family: var(--font-serif);
-  font-size: clamp(28px, 4cqw, 44px);
+  font-size: 21px;
   font-weight: 600;
-  line-height: 1.1;
+  line-height: 1.2;
   color: var(--paper-100);
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .player__subtitle {
-  font-size: 19px;
-  color: var(--text-dim);
-}
-
-.player__note {
-  margin: 18px 0 14px;
-  padding: 14px 18px;
-  border-radius: 3px;
-  color: var(--ink-900);
-  transform: rotate(-0.6deg);
-  box-shadow: 0 6px 16px -4px rgb(0 0 0 / 0.6);
-}
-
-.player__note strong {
-  display: block;
-  font-family: var(--font-serif);
-  font-size: 18px;
-}
-
-.player__note span {
+  overflow: hidden;
   font-size: 14.5px;
-  color: var(--ink-700);
+  color: var(--text-dim);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.player__status {
+  margin-top: 3px;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--brass-500);
+}
+
+.player__toggle {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  color: var(--walnut-900);
+  background: linear-gradient(180deg, var(--brass-400), var(--brass-500));
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.4),
+    0 4px 12px rgb(0 0 0 / 0.45);
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+
+.player__toggle svg {
+  width: 26px;
+  height: 26px;
 }

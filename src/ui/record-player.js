@@ -1,21 +1,26 @@
 // @ts-check
-// Plattenteller-Ebene: Die angetippte Hülle fliegt an ihren Platz, die
-// Schallplatte gleitet heraus und beginnt sich zu drehen. Danach (vorerst)
-// der Platzhalter für den Player aus Schritt 2.
+// Plattenteller-Ebene: Die angetippte Hülle fliegt an ihren Platz und legt
+// sich schräg, die Schallplatte gleitet heraus auf den Plattenteller. Den
+// Tonarm auf die Platte ziehen = abspielen, zurück = stoppen.
 //
-// Zuverlässigkeit: Endpositionen legt CSS fest; animiert wird nur von der
-// gemessenen Starthülle dorthin (FLIP, nur transform/opacity). Jede Animation
-// endet in einem definierten Zustand – auch wenn sie abgebrochen wird.
+// Zuverlässigkeit: Endpositionen legt CSS fest (Quer- und Hochformat);
+// animiert wird nur von der gemessenen Starthülle dorthin (FLIP, nur
+// transform/opacity). Jede Animation hat eine Zeitgrenze und endet in einem
+// definierten Zustand – auch wenn sie unterbrochen wird.
 
-import { h, prefersReducedMotion } from './dom.js';
+import { h, svg, prefersReducedMotion } from './dom.js';
 import { createCover, labelColors } from './cover-art.js';
-import { kindLabel, metaLine } from './format.js';
+import { metaLine } from './format.js';
+import { createTonearm } from './tonearm.js';
 
 /** @typedef {import('../state/app-state.js').DisplayItem} DisplayItem */
 
 const EASE_OUT = 'cubic-bezier(0.2, 0.8, 0.2, 1)';
 const EASE_IN_OUT = 'cubic-bezier(0.65, 0, 0.35, 1)';
-const DISC_OUT = 'translateX(57%)';
+const SPIN_SECONDS = 1.8; // 33⅓ U/min
+
+const ICON_PLAY = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l10.5-6.5z" fill="currentColor"/></svg>';
+const ICON_STOP = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6.5" y="6.5" width="11" height="11" rx="1.5" fill="currentColor"/></svg>';
 
 /**
  * Startwerte (Hülle → Endposition) für FLIP.
@@ -25,6 +30,14 @@ const DISC_OUT = 'translateX(57%)';
 function inverse(from, to) {
   const scale = from.width / to.width;
   return `translate(${from.left - to.left}px, ${from.top - to.top}px) scale(${scale})`;
+}
+
+/**
+ * Schräglage der Hülle – identisch zur CSS-Regel `.record.is-tilted .record__sleeve`.
+ * @param {number} size  Hüllengröße in px
+ */
+function tilt(size) {
+  return `perspective(${size * 3.2}px) translateX(${size * -0.04}px) rotateY(18deg) rotateX(4deg) rotateZ(-5deg)`;
 }
 
 /**
@@ -48,15 +61,67 @@ async function settle(animations) {
   }
 }
 
+/** @param {number} ms */
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 /** @param {DOMRect} rect */
 function isUsable(rect) {
   return rect.width > 4 && rect.height > 4 && rect.bottom > 0 && rect.top < window.innerHeight;
 }
 
 /**
- * @param {{ onRequestClose: () => void }} handlers
+ * Drehen der Platte mit Hoch- und Auslaufen (wie ein echter Plattenteller).
+ * @param {HTMLElement} el
  */
-export function createRecordPlayer({ onRequestClose }) {
+function createSpin(el) {
+  const animation = el.animate(
+    [{ transform: 'rotate(0deg)' }, { transform: 'rotate(360deg)' }],
+    { duration: SPIN_SECONDS * 1000, iterations: Infinity },
+  );
+  animation.pause();
+  let rate = 0;
+  let target = 0;
+  let raf = 0;
+  let last = 0;
+
+  /** @param {number} now */
+  function step(now) {
+    const dt = Math.min(0.05, (now - last) / 1000);
+    last = now;
+    rate = target > rate ? Math.min(target, rate + dt / 0.8) : Math.max(target, rate - dt / 1.2);
+    if (rate <= 0) {
+      animation.pause();
+    } else {
+      animation.playbackRate = rate;
+      if (animation.playState !== 'running') animation.play();
+    }
+    raf = rate === target ? 0 : requestAnimationFrame(step);
+  }
+
+  return {
+    /** @param {boolean} on */
+    set(on) {
+      target = on ? (prefersReducedMotion() ? 0.3 : 1) : 0;
+      if (!raf) {
+        last = performance.now();
+        raf = requestAnimationFrame(step);
+      }
+    },
+    cancel() {
+      if (raf) cancelAnimationFrame(raf);
+      raf = 0;
+      animation.cancel();
+    },
+  };
+}
+
+/**
+ * @param {{
+ *   onRequestClose: () => void,
+ *   onRequestPlay: (on: boolean) => void,
+ * }} handlers
+ */
+export function createRecordPlayer({ onRequestClose, onRequestPlay }) {
   const layer = h('div', {
     class: 'player-layer',
     hidden: true,
@@ -65,12 +130,16 @@ export function createRecordPlayer({ onRequestClose }) {
     'aria-labelledby': 'player-title',
   });
 
-  /** @type {{ item: DisplayItem, button: HTMLElement, record: HTMLElement, disc: HTMLElement, info: HTMLElement, backdrop: HTMLElement } | null} */
+  /**
+   * @typedef {ReturnType<typeof build>} Parts
+   * @type {(Parts & { item: DisplayItem, button: HTMLElement }) | null}
+   */
   let current = null;
   /** @type {Promise<void> | null} */
   let opening = null;
   /** @type {Promise<void> | null} */
   let closing = null;
+  let playing = false;
 
   /** Selbst gestartete, noch laufende Animationen */
   /** @type {Set<Animation>} */
@@ -109,39 +178,71 @@ export function createRecordPlayer({ onRequestClose }) {
     const { record } = item;
     const colors = labelColors(record);
 
-    const disc = h('div', { class: 'record__disc', 'aria-hidden': 'true' },
-      h('div', { class: 'record__spin' },
-        h('div', { class: 'record__label', style: { '--label-color': colors.color, '--label-ink': colors.ink } },
-          h('div', { class: 'record__label-title' }, record.title),
-          h('div', { class: 'record__label-sub' }, record.kind === 'album' ? record.subtitle : 'Playlist'),
-        ),
+    const spinEl = h('div', { class: 'record__spin' },
+      h('div', { class: 'record__label', style: { '--label-color': colors.color, '--label-ink': colors.ink } },
+        h('div', { class: 'record__label-title' }, record.title),
+        h('div', { class: 'record__label-sub' }, record.kind === 'album' ? record.subtitle : 'Playlist'),
       ),
-      h('div', { class: 'record__sheen' }),
     );
-    const recordEl = h('div', { class: 'record' },
-      disc,
-      h('div', { class: 'record__sleeve' }, createCover(record)),
-    );
+    const disc = h('div', { class: 'record__disc', 'aria-hidden': 'true' }, spinEl, h('div', { class: 'record__sheen' }));
+    const sleeve = h('div', { class: 'record__sleeve' }, createCover(record));
+    const recordEl = h('div', { class: 'record' }, disc, sleeve);
+    const platter = h('div', { class: 'platter', 'aria-hidden': 'true' });
+    const tonearm = createTonearm({ onRequest: onRequestPlay });
+    const deck = h('div', { class: 'player__deck' }, platter, recordEl, tonearm.el);
 
-    const back = h('button', { type: 'button', class: 'button', onclick: () => onRequestClose() },
-      '← Zurück zur Sammlung');
-    const info = h('div', { class: 'player__info' },
-      h('div', { class: 'player__eyebrow' }, `${kindLabel(record)} aufgelegt`),
-      h('h2', { class: 'player__title', id: 'player-title' }, record.title),
-      h('div', { class: 'player__subtitle' }, `${record.subtitle} · ${metaLine(item)}`),
-      h('div', { class: 'player__note tex-paper' },
-        h('strong', {}, 'Player kommt in Schritt 2'),
-        h('span', {}, 'Hier steuerst du bald Spotify auf dem iPad – Wiedergabe, Titel, Lautstärke.'),
-      ),
+    const status = h('div', { class: 'player__status', 'aria-live': 'polite' });
+    const toggle = h('button', { type: 'button', class: 'player__toggle', onclick: () => onRequestPlay(!playing) });
+    const back = h('button', { type: 'button', class: 'player__back', onclick: () => onRequestClose() },
+      h('span', { 'aria-hidden': 'true' }, '←'), 'Sammlung');
+    const bar = h('div', { class: 'player__bar' },
       back,
+      h('div', { class: 'player__now' },
+        h('h2', { class: 'player__title', id: 'player-title' }, record.title),
+        h('div', { class: 'player__subtitle' }, `${record.subtitle} · ${metaLine(item)}`),
+        status,
+      ),
+      toggle,
     );
 
     const backdrop = h('div', { class: 'player-layer__backdrop' });
     layer.replaceChildren(
       backdrop,
-      h('div', { class: 'player' }, h('div', { class: 'player__deck' }, recordEl), info),
+      h('div', { class: 'player' }, h('div', { class: 'player__stage' }, deck), bar),
     );
-    return { record: recordEl, disc, info, backdrop, back };
+    return { record: recordEl, disc, sleeve, platter, tonearm, deck, bar, backdrop, status, toggle, spin: createSpin(spinEl) };
+  }
+
+  /** Anzeige (Tonarm, Drehen, Leiste) an den Abspielzustand anpassen. */
+  function renderPlaying() {
+    if (!current) return;
+    const { tonearm, spin, status, toggle } = current;
+    tonearm.setOn(playing);
+    spin.set(playing);
+    status.textContent = playing ? 'Läuft · Spotify folgt in Schritt 2' : 'Tonarm auf die Platte ziehen';
+    toggle.replaceChildren(svg(playing ? ICON_STOP : ICON_PLAY));
+    toggle.setAttribute('aria-label', playing ? 'Stoppen' : 'Abspielen');
+    toggle.setAttribute('aria-pressed', String(playing));
+  }
+
+  /**
+   * Abspielzustand von außen setzen (Quelle der Wahrheit ist der App-Zustand).
+   * @param {boolean} on
+   */
+  function setPlaying(on) {
+    playing = on;
+    renderPlaying();
+  }
+
+  /** Zielverschiebung der Platte (aus CSS, je nach Ausrichtung) in px. */
+  function discOffset(parts) {
+    const style = getComputedStyle(parts.deck);
+    const size = parts.record.offsetWidth;
+    return {
+      x: (parseFloat(style.getPropertyValue('--out-x')) || 0) * size,
+      y: (parseFloat(style.getPropertyValue('--out-y')) || 0) * size,
+      size,
+    };
   }
 
   /**
@@ -164,33 +265,34 @@ export function createRecordPlayer({ onRequestClose }) {
     const parts = build(item);
     current = { item, button, ...parts };
     layer.hidden = false;
+    renderPlaying();
     const reduced = prefersReducedMotion();
 
     try {
       const to = parts.record.getBoundingClientRect();
+      const out = discOffset(parts);
       button.classList.add('is-opening');
-      parts.disc.style.transform = DISC_OUT;
+      // Endzustand per CSS-Klassen; die Animationen laufen nur dorthin.
+      parts.record.classList.add('is-tilted', 'is-out');
 
       if (reduced || !isUsable(from)) {
         await settle([animate(layer, { opacity: [0, 1] }, { duration: reduced ? 180 : 300, easing: 'ease-out' })]);
       } else {
         await settle([
           animate(parts.backdrop, { opacity: [0, 1] }, { duration: 380, easing: 'ease-out' }),
-          animate(parts.record, { transform: [inverse(from, to), 'none'] }, { duration: 560, easing: EASE_OUT }),
+          animate(parts.record, { transform: [inverse(from, to), 'none'] }, { duration: 600, easing: EASE_OUT }),
+          animate(parts.sleeve, { transform: ['none', tilt(out.size)] }, { duration: 600, easing: EASE_OUT }),
+          animate(parts.platter, { opacity: [0, 1], transform: ['scale(0.94)', 'none'] }, { duration: 420, delay: 220, easing: EASE_OUT, fill: 'backwards' }),
+          animate(parts.tonearm.el, { opacity: [0, 1] }, { duration: 420, delay: 320, easing: 'ease-out', fill: 'backwards' }),
           animate(parts.disc,
-            { transform: ['translateX(0)', DISC_OUT] },
-            { duration: 640, delay: 420, easing: 'cubic-bezier(0.3, 0.7, 0.2, 1)', fill: 'backwards' },
-          ),
-          animate(parts.info,
-            { opacity: [0, 1], transform: ['translateY(14px)', 'none'] },
-            { duration: 420, delay: 640, easing: EASE_OUT, fill: 'backwards' },
-          ),
+            { transform: ['translate(0px, 0px)', `translate(${out.x}px, ${out.y}px)`] },
+            { duration: 720, delay: 480, easing: 'cubic-bezier(0.3, 0.7, 0.2, 1)', fill: 'backwards' }),
+          animate(parts.bar,
+            { opacity: [0, 1], transform: ['translateY(16px)', 'none'] },
+            { duration: 420, delay: 700, easing: EASE_OUT, fill: 'backwards' }),
         ]);
       }
-      if (current?.record === parts.record && !closing) {
-        parts.record.classList.add('is-playing');
-        parts.back.focus({ preventScroll: true });
-      }
+      if (current?.record === parts.record && !closing) parts.toggle.focus({ preventScroll: true });
     } catch (err) {
       console.error('[player] Öffnen-Animation fehlgeschlagen', err);
     }
@@ -213,39 +315,54 @@ export function createRecordPlayer({ onRequestClose }) {
       await opening;
     }
     if (!current) return;
-    const { button, record, disc, info, backdrop } = current;
+    const parts = current;
     const reduced = prefersReducedMotion();
 
     try {
-      record.classList.remove('is-playing');
-      const target = sleeve?.isConnected ? sleeve.getBoundingClientRect() : null;
+      // Tonarm erst zurück in die Ruhelage, dann die Platte einpacken.
+      playing = false;
+      renderPlaying();
+      const armTime = parts.tonearm.settleTime();
+      if (armTime > 0 && !reduced) await wait(Math.min(armTime, 700));
 
+      const target = sleeve?.isConnected ? sleeve.getBoundingClientRect() : null;
       if (reduced || !target || !isUsable(target)) {
         await settle([animate(layer, { opacity: [1, 0] }, { duration: reduced ? 160 : 260, easing: 'ease-in', fill: 'forwards' })]);
       } else {
-        const to = record.getBoundingClientRect();
-        disc.style.transform = 'none';
-        info.style.opacity = '0';
+        const out = discOffset(parts);
+        parts.record.classList.remove('is-out');
+        parts.bar.style.opacity = '0';
+        parts.tonearm.el.style.opacity = '0';
         await settle([
-          animate(info, { opacity: [1, 0] }, { duration: 160, easing: 'ease-in' }),
-          animate(disc, { transform: [DISC_OUT, 'translateX(0)'] }, { duration: 380, easing: EASE_IN_OUT }),
+          animate(parts.bar, { opacity: [1, 0] }, { duration: 160, easing: 'ease-in' }),
+          animate(parts.tonearm.el, { opacity: [1, 0] }, { duration: 260, easing: 'ease-in' }),
+          animate(parts.disc,
+            { transform: [`translate(${out.x}px, ${out.y}px)`, 'translate(0px, 0px)'] },
+            { duration: 460, easing: EASE_IN_OUT }),
         ]);
-        record.style.transform = inverse(target, to);
-        backdrop.style.opacity = '0';
+        const to = parts.record.getBoundingClientRect();
+        parts.record.classList.remove('is-tilted');
+        parts.record.style.transform = inverse(target, to);
+        parts.backdrop.style.opacity = '0';
+        parts.platter.style.opacity = '0';
         await settle([
-          animate(record, { transform: ['none', inverse(target, to)] }, { duration: 420, easing: EASE_IN_OUT }),
-          animate(backdrop, { opacity: [1, 0] }, { duration: 420, easing: 'ease-in' }),
+          animate(parts.sleeve, { transform: [tilt(out.size), 'none'] }, { duration: 440, easing: EASE_IN_OUT }),
+          animate(parts.record, { transform: ['none', inverse(target, to)] }, { duration: 440, easing: EASE_IN_OUT }),
+          animate(parts.platter, { opacity: [1, 0] }, { duration: 260, easing: 'ease-in' }),
+          animate(parts.backdrop, { opacity: [1, 0] }, { duration: 440, easing: 'ease-in' }),
         ]);
       }
     } catch (err) {
       console.error('[player] Schließen-Animation fehlgeschlagen', err);
     } finally {
       // Immer in den Ausgangszustand zurück – egal, was oben passiert ist.
+      parts.spin.cancel();
+      parts.tonearm.destroy();
       layer.hidden = true;
       for (const animation of [...active, ...layer.getAnimations({ subtree: true })]) animation.cancel();
       active.clear();
       layer.replaceChildren();
-      button.classList.remove('is-opening');
+      parts.button.classList.remove('is-opening');
       current = null;
     }
   }
@@ -254,6 +371,7 @@ export function createRecordPlayer({ onRequestClose }) {
     el: layer,
     open,
     close,
+    setPlaying,
     isOpen: () => current !== null,
     /** Schlüssel der aufgelegten Platte (für die Rückkehr-Animation) */
     currentKey: () => current?.item.key ?? null,

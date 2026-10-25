@@ -57,6 +57,9 @@ Fehlerfälle lassen sich per URL-Parameter simulieren:
 - **Stapel:** wischen, mit Schwung, die Hüllen rasten ein. Eine seitliche Hülle
   antippen holt sie in die Mitte, die mittlere antippen öffnet sie.
   Am Mac gehen auch Pfeiltasten, Trackpad und Mausrad.
+- **Plattenteller:** Den Tonarm auf die Platte ziehen startet die Wiedergabe,
+  herunterziehen stoppt sie. Antippen des Arms oder der Play/Stopp-Knopf in der
+  Leiste schalten ebenfalls um. Echten Ton gibt es erst mit Spotify (Schritt 2).
 - **Zurück:** Button, Escape oder die Zurück-Geste des Browsers
 
 ## Aufbau

@@ -75,8 +75,21 @@ export function createApp(root, { store, library }) {
   const stage = h('main', { class: 'stage', id: 'collection', role: 'tabpanel' }, status.el);
   const menu = h('div', { class: 'menu' }, topbar, stage);
 
-  const player = createRecordPlayer({ onRequestClose: requestClose });
+  const player = createRecordPlayer({
+    onRequestClose: requestClose,
+    // Schritt 2: hier Spotify play/pause aufrufen und erst bei Erfolg `playing` setzen.
+    onRequestPlay: (on) => {
+      store.set({ playing: on && store.get().openRecord !== null });
+      // Immer mit dem tatsächlichen Zustand abgleichen – auch wenn die Anfrage
+      // nichts geändert hat (sonst bliebe der Tonarm z. B. auf der Platte liegen).
+      player.setPlaying(store.get().playing);
+    },
+  });
   root.replaceChildren(menu, player.el);
+
+  store.subscribe((state, prev) => {
+    if (state.playing !== prev.playing) player.setPlaying(state.playing);
+  });
 
   /** @type {View | null} */
   let view = null;
@@ -141,7 +154,7 @@ export function createApp(root, { store, library }) {
    */
   function onOpen(item, sleeve, button) {
     if (player.isOpen()) return;
-    store.set({ openRecord: item.record });
+    store.set({ openRecord: item.record, playing: false });
     menu.inert = true;
     try {
       history.pushState({ vinyl: 'player' }, '');
@@ -160,10 +173,13 @@ export function createApp(root, { store, library }) {
     const key = player.currentKey();
     const sleeve = key && view ? view.findSleeve(key) : null;
     try {
+      // Vorerst stoppt das Einpacken der Platte die Wiedergabe.
+      // (Schritt 2 entscheidet, ob Musik beim Stöbern weiterläuft – Mini-Player.)
+      store.set({ playing: false });
       await player.close(sleeve);
     } finally {
       menu.inert = false;
-      store.set({ openRecord: null });
+      store.set({ openRecord: null, playing: false });
       const focusTarget = sleeve?.closest('button') ?? sleeve;
       focusTarget?.focus({ preventScroll: true });
       closing = false;

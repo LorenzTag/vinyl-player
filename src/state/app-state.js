@@ -30,6 +30,8 @@ import { createStore } from './store.js';
  * @property {LayoutId} layout
  * @property {Record<TabId, Resource>} library
  * @property {RecordItem | null} openRecord   Platte, die gerade „auf dem Plattenteller" liegt
+ * @property {boolean} playing                Tonarm liegt auf, Wiedergabe läuft
+ *                                            (Schritt 2: erst nach Bestätigung durch Spotify)
  */
 
 /** @type {TabId[]} */
@@ -75,6 +77,7 @@ export function createAppStore() {
     layout: prefs.layout ?? 'crate',
     library: { playlists: emptyResource(), albums: emptyResource(), recent: emptyResource() },
     openRecord: null,
+    playing: false,
   };
 
   const store = createStore(initial);
