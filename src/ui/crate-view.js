@@ -1,23 +1,29 @@
 // @ts-check
-// Vorschlag B: Plattenstapel (Cover-Flow) auf Filz.
+// Eine Regal-Zeile im Plattenschrank: Cover-Flow mit dreidimensionalen Hüllen.
+// Die seitlichen Hüllen zeigen ihren Rücken mit Titel und Ersteller – wie
+// Platten, die schräg im Regal stehen.
 //
 // Position `pos` ist ein Kommawert: welche Platte (Index) gerade in der Mitte
 // steht. Ziehen, Schwung, Einrasten, Tastatur und Mausrad verändern nur `pos`;
 // render() leitet daraus für jede sichtbare Hülle transform/opacity ab – alles
 // im selben Frame, ohne Layout-Arbeit.
+//
+// Senkrechte Bewegungen gibt die Zeile ab (Wechsel zwischen den Regalen macht
+// der Plattenschrank).
 
 import { h, clamp, prefersReducedMotion } from './dom.js';
-import { createCover } from './cover-art.js';
-import { loadImage, paletteFromImage } from './cover-colors.js';
+import { createCover, coverPalette } from './cover-art.js';
+import { loadImage, paletteFromImage, cachedPalette } from './cover-colors.js';
 import { accessibleName, metaLine } from './format.js';
 
 /** @typedef {import('../state/app-state.js').DisplayItem} DisplayItem */
+/** @typedef {import('../data/types.js').RecordItem} RecordItem */
 /** @typedef {import('./view-types.js').View} View */
 /** @typedef {import('./view-types.js').OpenHandler} OpenHandler */
 
-const SLOT = 0.26;        // Abstand benachbarter Hüllen im Stapel (× Hüllengröße)
-const PUSH = 0.42;        // Lücke links/rechts der mittleren Hülle (× Hüllengröße)
-const ANGLE = 58;         // Drehung der seitlichen Hüllen in Grad
+const SLOT = 0.24;        // Abstand benachbarter Hüllen im Stapel (× Hüllengröße)
+const PUSH = 0.44;        // Lücke links/rechts der mittleren Hülle (× Hüllengröße)
+const ANGLE = 64;         // Drehung der seitlichen Hüllen in Grad (Rücken wird sichtbar)
 const RANGE = 5;          // so viele Hüllen je Seite werden dargestellt
 const DRAG_THRESHOLD = 8; // px, ab dann ist es Ziehen statt Tippen
 const RUBBER = 0.3;       // Widerstand hinter dem ersten/letzten Element
@@ -35,8 +41,43 @@ const MAX_VELOCITY = 28;  // Platten/s – deckelt Ausreißer bei der Schwungber
  */
 
 /**
+ * Farben des Hüllen-Rückens (wie die Grundfarbe des Covers).
+ * @param {HTMLElement} el
+ * @param {{ bg: string, ink: string }} palette
+ */
+function paintSpine(el, palette) {
+  el.style.setProperty('--spine-bg', palette.bg);
+  el.style.setProperty('--spine-ink', palette.ink);
+}
+
+/**
+ * @param {RecordItem} record
+ * @param {HTMLElement} el
+ */
+function colorSpine(record, el) {
+  if (!record.imageUrl) {
+    paintSpine(el, coverPalette(record));
+    return;
+  }
+  const known = cachedPalette(record.imageUrl);
+  if (known) {
+    paintSpine(el, known);
+    return;
+  }
+  // Bis die echten Farben gelesen sind: Karton-Ton.
+  paintSpine(el, { bg: '#e9dfcc', ink: '#2a2018' });
+  paletteFromImage(record.imageUrl).then((palette) => {
+    if (palette) paintSpine(el, palette);
+  });
+}
+
+/**
  * @param {{ onOpen: OpenHandler }} handlers
- * @returns {View}
+ * @returns {View & {
+ *   setActive: (active: boolean) => void,
+ *   setVisible: (visible: boolean) => void,
+ *   focusCenter: () => void,
+ * }}
  */
 export function createCrateView({ onOpen }) {
   // Unsichtbarer Messkörper: liefert die per CSS bestimmte Hüllengröße (--size).
@@ -47,7 +88,7 @@ export function createCrateView({ onOpen }) {
   const meta = h('div', { class: 'crate__meta' });
   const caption = h('div', { class: 'crate__caption', 'aria-live': 'polite' }, title, subtitle, meta);
   const count = h('div', { class: 'crate__count', 'aria-hidden': 'true' });
-  const root = h('div', { class: 'view crate tex-felt' }, probe, stage, caption, count);
+  const root = h('div', { class: 'crate' }, probe, stage, caption, count);
 
   /** @type {CrateEntry[]} */
   let entries = [];
@@ -56,11 +97,13 @@ export function createCrateView({ onOpen }) {
   let size = 0;          // Hüllengröße in px
   let pos = 0;           // aktuelle Position (Index in der Mitte, Kommawert)
   let target = 0;        // Ziel der laufenden Animation
-  let tau = 0.14;        // Zeitkonstante der Animation in s
+  let tau = 0.18;        // Zeitkonstante der Animation in s
   let raf = 0;           // laufende Animation
   let dragFrame = 0;     // ausstehendes Neuzeichnen beim Ziehen
   let lastFrame = 0;
   let centerIndex = -1;
+  let active = true;
+  let visible = true;
 
   // ---------- Darstellung ----------
 
@@ -81,7 +124,7 @@ export function createCrateView({ onOpen }) {
       `translate3d(${x.toFixed(1)}px,0,0) perspective(${Math.round(size * 2.6)}px) ` +
       `rotateY(${(-p * ANGLE).toFixed(2)}deg) scale(${scale.toFixed(4)})`;
     const opacity = a > RANGE - 1 ? clamp(RANGE - a, 0, 1).toFixed(2) : '1';
-    const shadeOpacity = Math.min(0.78, Math.min(a, 1) * 0.42 + Math.max(0, a - 1) * 0.07).toFixed(2);
+    const shadeOpacity = Math.min(0.7, Math.min(a, 1) * 0.38 + Math.max(0, a - 1) * 0.06).toFixed(2);
     if (transform !== entry.transform) entry.el.style.transform = entry.transform = transform;
     if (opacity !== entry.opacity) entry.el.style.opacity = entry.opacity = opacity;
     if (shadeOpacity !== entry.shadeOpacity) entry.shade.style.opacity = entry.shadeOpacity = shadeOpacity;
@@ -93,7 +136,7 @@ export function createCrateView({ onOpen }) {
   }
 
   function render() {
-    if (!entries.length) return;
+    if (!entries.length || !visible) return;
     const lo = Math.max(0, Math.floor(pos) - RANGE);
     const hi = Math.min(entries.length - 1, Math.ceil(pos) + RANGE);
     for (const i of shown) {
@@ -113,6 +156,12 @@ export function createCrateView({ onOpen }) {
     if (center !== centerIndex) setCenter(center);
   }
 
+  /** Alle Hüllen ausblenden (Zeile weit weg vom Blick – spart Grafikspeicher). */
+  function hideAll() {
+    for (const i of shown) entries[i].el.style.display = 'none';
+    shown.clear();
+  }
+
   /** @param {number} index */
   function setCenter(index) {
     const previous = centerIndex;
@@ -125,7 +174,7 @@ export function createCrateView({ onOpen }) {
     // Nur die zwei betroffenen Hüllen anfassen (nicht alle – das kostet sonst Frames).
     entries[previous]?.el.setAttribute('aria-current', 'false');
     entries[index].el.setAttribute('aria-current', 'true');
-    if (previous !== -1 && !prefersReducedMotion()) {
+    if (previous !== -1 && active && !prefersReducedMotion()) {
       // Ohne erzwungenes Layout (kein offsetWidth) – reine opacity/transform-Animation.
       caption.getAnimations().forEach((a) => a.cancel());
       caption.animate(
@@ -177,20 +226,37 @@ export function createCrateView({ onOpen }) {
 
   // ---------- Geste: Ziehen mit Schwung ----------
 
-  /** @type {{ id: number, startX: number, startPos: number, dragging: boolean, samples: Array<{ t: number, x: number }> } | null} */
+  /**
+   * @type {{ id: number, startX: number, startY: number, startPos: number, dragging: boolean,
+   *          samples: Array<{ t: number, x: number }> } | null}
+   */
   let drag = null;
   let suppressClickUntil = 0;
 
   stage.addEventListener('pointerdown', (event) => {
-    if (drag || !entries.length || (event.pointerType === 'mouse' && event.button !== 0)) return;
+    if (!active || drag || !entries.length || (event.pointerType === 'mouse' && event.button !== 0)) return;
     stopAnimation();
-    drag = { id: event.pointerId, startX: event.clientX, startPos: pos, dragging: false, samples: [{ t: event.timeStamp, x: event.clientX }] };
+    drag = {
+      id: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      startPos: pos,
+      dragging: false,
+      samples: [{ t: event.timeStamp, x: event.clientX }],
+    };
   });
 
   stage.addEventListener('pointermove', (event) => {
     if (!drag || event.pointerId !== drag.id) return;
     let dx = event.clientX - drag.startX;
     if (!drag.dragging) {
+      const dy = event.clientY - drag.startY;
+      // Senkrecht: gehört dem Plattenschrank (Regal wechseln) – hier loslassen.
+      if (Math.abs(dy) >= DRAG_THRESHOLD && Math.abs(dy) > Math.abs(dx)) {
+        drag = null;
+        if (pos !== Math.round(pos)) animateTo(pos);
+        return;
+      }
       if (Math.abs(dx) < DRAG_THRESHOLD) return;
       drag.dragging = true;
       // Die Schwelle nicht als Sprung nachholen – ab hier folgt der Stapel 1:1.
@@ -242,8 +308,7 @@ export function createCrateView({ onOpen }) {
     animateTo(destination, timeConstant);
   }
 
-  // Loslassen auch außerhalb der Bühne erkennen (Finger rutscht auf die
-  // Bildunterschrift o. Ä.) – sonst bliebe die Geste hängen.
+  // Loslassen auch außerhalb der Bühne erkennen – sonst bliebe die Geste hängen.
   window.addEventListener('pointerup', endDrag, true);
   window.addEventListener('pointercancel', endDrag, true);
   stage.addEventListener('lostpointercapture', (event) => {
@@ -253,7 +318,7 @@ export function createCrateView({ onOpen }) {
   // ---------- Tippen, Tastatur, Mausrad ----------
 
   stage.addEventListener('click', (event) => {
-    if (event.timeStamp < suppressClickUntil) return;
+    if (!active || event.timeStamp < suppressClickUntil) return;
     const button = /** @type {HTMLElement | null} */ (/** @type {Element} */ (event.target).closest('.crate-item'));
     if (!button) return;
     const index = entries.findIndex((e) => e.el === button);
@@ -280,14 +345,14 @@ export function createCrateView({ onOpen }) {
     if (index >= 0 && index !== Math.round(target) && !drag) animateTo(index, 0.16);
   });
 
+  // Waagerechtes Scrollen (Trackpad) blättert; senkrechtes gehört dem Schrank.
   let wheelTimer = 0;
   stage.addEventListener('wheel', (event) => {
-    if (!entries.length) return;
+    if (!active || !entries.length || Math.abs(event.deltaX) <= Math.abs(event.deltaY)) return;
     event.preventDefault();
     stopAnimation();
-    const delta = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
     const max = entries.length - 1;
-    pos = clamp(pos + delta / (SLOT * size * 1.6), -0.3, max + 0.3);
+    pos = clamp(pos + event.deltaX / (SLOT * size * 1.6), -0.3, max + 0.3);
     render();
     clearTimeout(wheelTimer);
     wheelTimer = window.setTimeout(() => animateTo(pos, 0.12), 120);
@@ -296,11 +361,12 @@ export function createCrateView({ onOpen }) {
   // Größe hängt vom Bildschirm ab (Drehen, Split View).
   const resizeObserver = new ResizeObserver(() => {
     measure();
+    for (const e of entries) e.transform = undefined; // neu berechnen
     render();
   });
   resizeObserver.observe(stage);
 
-  // ---------- View-Schnittstelle ----------
+  // ---------- Schnittstelle ----------
 
   return {
     el: root,
@@ -311,14 +377,23 @@ export function createCrateView({ onOpen }) {
       shown.clear();
       centerIndex = -1;
       entries = items.map((item) => {
+        const { record } = item;
         const shade = h('div', { class: 'crate-item__shade' });
+        const face = h('div', { class: 'crate-item__face' }, createCover(record), shade);
+        const spineText = () => h('span', { class: 'crate-item__spine-text' },
+          h('strong', {}, record.title), h('span', {}, record.subtitle));
         const el = h('button', {
           type: 'button',
           class: 'crate-item',
-          'aria-label': accessibleName(item.record),
+          'aria-label': accessibleName(record),
           dataset: { key: item.key },
           style: { display: 'none' },
-        }, createCover(item.record), shade);
+        },
+          face,
+          h('div', { class: 'crate-item__spine crate-item__spine--left', 'aria-hidden': 'true' }, spineText()),
+          h('div', { class: 'crate-item__spine crate-item__spine--right', 'aria-hidden': 'true' }, spineText()),
+        );
+        colorSpine(record, el);
         return { item, el, shade, z: 0 };
       });
       stage.replaceChildren(...entries.map((e) => e.el));
@@ -340,6 +415,34 @@ export function createCrateView({ onOpen }) {
 
     findSleeve(key) {
       return entries.find((e) => e.item.key === key)?.el ?? null;
+    },
+
+    /** Nur die Zeile im Blick nimmt Gesten und Klicks an. */
+    setActive(value) {
+      active = value;
+      root.classList.toggle('is-active', value);
+      if (!value && drag) {
+        drag = null;
+        stage.classList.remove('is-dragging');
+      }
+    },
+
+    /** Zeilen weit weg vom Blick zeichnen keine Hüllen (spart Grafikspeicher). */
+    setVisible(value) {
+      if (visible === value) return;
+      visible = value;
+      if (value) {
+        measure();
+        for (const e of entries) e.transform = undefined;
+        render();
+      } else {
+        stopAnimation();
+        hideAll();
+      }
+    },
+
+    focusCenter() {
+      entries[centerIndex]?.el.focus({ preventScroll: true });
     },
 
     destroy() {

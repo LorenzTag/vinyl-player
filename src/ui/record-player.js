@@ -325,7 +325,8 @@ export function createRecordPlayer({ store, playback, onRequestClose }) {
       onClose: () => setList(false),
     });
     const toast = h('div', { class: 'player__toast', role: 'status', 'aria-live': 'polite' });
-    const player = h('div', { class: 'player' }, stage, bar);
+    // Standard ist Standby: Leiste erst nach Tippen ins Leere einblenden.
+    const player = h('div', { class: 'player is-standby' }, stage, bar);
 
     const backdrop = h('div', { class: 'player-layer__backdrop' });
     layer.replaceChildren(backdrop, player, tracklist.el, toast);
@@ -1023,9 +1024,10 @@ export function createRecordPlayer({ store, playback, onRequestClose }) {
           animate(parts.disc,
             { transform: ['translate(0px, 0px)', `translate(${out.x}px, ${out.y}px)`] },
             { duration: 720, delay: 480, easing: 'cubic-bezier(0.3, 0.7, 0.2, 1)', fill: 'backwards' }),
-          animate(parts.bar,
+          // Im Standby (Standard) bleibt die Leiste verborgen – nicht kurz aufblitzen lassen.
+          ...(parts.player.classList.contains('is-standby') ? [] : [animate(parts.bar,
             { opacity: [0, 1], transform: ['translateY(16px)', 'none'] },
-            { duration: 420, delay: 700, easing: EASE_OUT, fill: 'backwards' }),
+            { duration: 420, delay: 700, easing: EASE_OUT, fill: 'backwards' })]),
         ]);
       }
       if (current?.record === parts.record && !closing) {
@@ -1079,7 +1081,7 @@ export function createRecordPlayer({ store, playback, onRequestClose }) {
         parts.bar.style.opacity = '0';
         parts.tonearm.el.style.opacity = '0';
         await settle([
-          animate(parts.bar, { opacity: [1, 0] }, { duration: 160, easing: 'ease-in' }),
+          ...(parts.player.classList.contains('is-standby') ? [] : [animate(parts.bar, { opacity: [1, 0] }, { duration: 160, easing: 'ease-in' })]),
           animate(parts.tonearm.el, { opacity: [1, 0] }, { duration: 220, easing: 'ease-in' }),
           animate(parts.disc, { transform: [discFrom, 'translate(0px, 0px)'] }, { duration: 420, easing: EASE_IN_OUT }),
         ]);

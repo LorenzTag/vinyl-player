@@ -103,15 +103,7 @@
   color: var(--text-faint);
 }
 
-/* ---------- Kopfleiste: Layout-Umschalter + Konto ---------- */
-
-.topbar__end {
-  grid-area: switch;
-  justify-self: end;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
+/* ---------- Konto-Knopf (Ecke) ---------- */
 
 .account {
   position: relative;
@@ -123,8 +115,10 @@
   width: var(--touch);
   height: var(--touch);
   border-radius: 50%;
-  background: rgb(0 0 0 / 0.38);
-  box-shadow: inset 0 0 0 1px rgb(201 160 99 / 0.35);
+  background: rgb(20 13 9 / 0.55);
+  box-shadow:
+    inset 0 0 0 1px rgb(201 160 99 / 0.35),
+    0 6px 16px -4px rgb(0 0 0 / 0.6);
 }
 
 .account__initial {
@@ -163,18 +157,23 @@
   color: var(--ink-700);
 }
 
+.account__actions {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.account__action--quiet {
+  background: transparent !important;
+  box-shadow: inset 0 0 0 1px rgb(90 74 58 / 0.25);
+}
+
 .account__action {
   width: 100%;
   min-height: 44px;
-  margin-top: 12px;
   border-radius: 8px;
   font-weight: 600;
   color: var(--ink-900);
   background: rgb(90 74 58 / 0.12);
 }
 
-@media (max-width: 960px) {
-  .topbar__end {
-    gap: 8px;
-  }
-}

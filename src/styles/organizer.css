@@ -1,0 +1,381 @@
+/* „Plattenschrank einrichten": Regale links, Platten rechts, Auswahl unten. */
+
+.organizer {
+  position: fixed;
+  z-index: 90;
+  inset: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  background:
+    var(--tex-grain),
+    linear-gradient(180deg, var(--walnut-800), var(--walnut-950));
+  background-size: 180px 180px, auto;
+  animation: organizer-in 260ms var(--ease-out) both;
+}
+
+.organizer[hidden] {
+  display: none;
+}
+
+@keyframes organizer-in {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+}
+
+.organizer__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding:
+    calc(var(--safe-top) + 18px)
+    calc(var(--safe-right) + var(--gutter))
+    16px
+    calc(var(--safe-left) + var(--gutter));
+  border-bottom: 1px solid rgb(201 160 99 / 0.18);
+}
+
+.organizer__title {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: 28px;
+  font-weight: 600;
+  color: var(--paper-100);
+}
+
+.organizer__hint {
+  max-width: 62ch;
+  margin: 4px 0 0;
+  color: var(--text-dim);
+}
+
+.organizer__done {
+  flex: none;
+  min-width: 120px;
+}
+
+.organizer__body {
+  display: grid;
+  grid-template-columns: 320px minmax(0, 1fr);
+  min-height: 0;
+}
+
+@media (orientation: portrait) {
+  .organizer__body {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+}
+
+/* ---------- Regale ---------- */
+
+.organizer__side {
+  min-height: 0;
+  padding: 18px 16px 24px calc(var(--safe-left) + var(--gutter));
+  overflow-y: auto;
+  border-right: 1px solid rgb(201 160 99 / 0.12);
+}
+
+@media (orientation: portrait) {
+  .organizer__side {
+    max-height: 38vh;
+    padding-right: calc(var(--safe-right) + var(--gutter));
+    border-right: 0;
+    border-bottom: 1px solid rgb(201 160 99 / 0.12);
+  }
+}
+
+.organizer__side-title,
+.organizer__section-title {
+  margin: 0 0 10px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--brass-500);
+}
+
+.organizer__shelves {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 12px;
+  padding: 0;
+  list-style: none;
+}
+
+.organizer__shelf {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto auto auto;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 4px 4px 12px;
+  border-radius: 10px;
+  background: rgb(255 240 220 / 0.06);
+  box-shadow: inset 0 0 0 1px rgb(255 240 220 / 0.08);
+}
+
+.organizer__name {
+  min-height: 44px;
+  overflow: hidden;
+  font-family: var(--font-serif);
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--paper-100);
+  text-align: left;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.organizer__name-input {
+  min-height: 44px;
+  min-width: 0;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 8px;
+  font: 600 17px var(--font-serif);
+  color: var(--ink-900);
+  background: var(--paper-100);
+  outline: 2px solid var(--brass-400);
+}
+
+.organizer__shelf-count {
+  min-width: 28px;
+  font-size: 13px;
+  font-weight: 700;
+  text-align: center;
+  color: var(--text-faint);
+}
+
+.organizer__icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  font-size: 18px;
+  color: var(--text-dim);
+}
+
+.organizer__icon:disabled {
+  opacity: 0.25;
+}
+
+.organizer__icon:active {
+  background: rgb(255 240 220 / 0.08);
+}
+
+.organizer__icon--danger {
+  color: #e6a08f;
+}
+
+.organizer__add {
+  width: 100%;
+  min-height: 48px;
+  border-radius: 10px;
+  font-weight: 700;
+  color: var(--brass-400);
+  box-shadow: inset 0 0 0 1px rgb(201 160 99 / 0.4);
+}
+
+.organizer__option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 48px;
+  margin-top: 14px;
+  color: var(--text-dim);
+}
+
+.organizer__check {
+  width: 22px;
+  height: 22px;
+  accent-color: var(--brass-500);
+}
+
+/* ---------- Platten ---------- */
+
+.organizer__main {
+  min-height: 0;
+  padding: 18px calc(var(--safe-right) + var(--gutter)) 140px 24px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.organizer__section {
+  margin-bottom: 26px;
+}
+
+.organizer__section-title span {
+  color: var(--text-faint);
+}
+
+.organizer__section.is-unsorted .organizer__section-title {
+  color: var(--paper-200);
+}
+
+.organizer__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(124px, 1fr));
+  gap: 14px;
+}
+
+.organizer__tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding: 6px;
+  border-radius: 10px;
+  text-align: left;
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+
+.organizer__tile:active {
+  transform: scale(0.97);
+}
+
+.organizer__cover {
+  display: block;
+  border-radius: 4px;
+  overflow: hidden;
+  box-shadow: 0 6px 14px -4px rgb(0 0 0 / 0.6);
+}
+
+.organizer__tile.is-selected {
+  background: rgb(201 160 99 / 0.22);
+  box-shadow: inset 0 0 0 2px var(--brass-400);
+}
+
+/* Häkchen bei ausgewählten Platten */
+.organizer__tile.is-selected::after {
+  content: "✓";
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--walnut-900);
+  background: var(--brass-400);
+  box-shadow: 0 2px 6px rgb(0 0 0 / 0.5);
+}
+
+.organizer__tile-title {
+  overflow: hidden;
+  font-family: var(--font-serif);
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--paper-100);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.organizer__tile-sub {
+  overflow: hidden;
+  font-size: 12.5px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.organizer__empty {
+  margin: 0;
+  color: var(--text-faint);
+}
+
+/* ---------- Auswahl: Ziel-Regal wählen ---------- */
+
+.organizer__actions {
+  position: fixed;
+  z-index: 2;
+  left: 50%;
+  bottom: calc(var(--safe-bottom) + 16px);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: min(calc(100% - 2 * var(--gutter)), 900px);
+  padding: 10px 12px;
+  border-radius: 18px;
+  background:
+    var(--tex-grain),
+    linear-gradient(180deg, rgb(46 31 21 / 0.97), rgb(20 13 9 / 0.98));
+  background-size: 180px 180px, auto;
+  box-shadow:
+    inset 0 1px 0 rgb(201 160 99 / 0.25),
+    0 16px 36px -10px rgb(0 0 0 / 0.85);
+  transform: translateX(-50%);
+  animation: actions-in 220ms var(--ease-out) both;
+}
+
+.organizer__actions[hidden] {
+  display: none;
+}
+
+@keyframes actions-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 16px);
+  }
+}
+
+.organizer__count {
+  flex: none;
+  font-weight: 700;
+  color: var(--paper-100);
+}
+
+.organizer__into {
+  flex: none;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.organizer__targets {
+  display: flex;
+  flex: 1;
+  gap: 8px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.organizer__targets::-webkit-scrollbar {
+  display: none;
+}
+
+.organizer__target {
+  flex: none;
+  min-height: 44px;
+  padding: 0 16px;
+  border-radius: 999px;
+  font-weight: 700;
+  color: var(--walnut-900);
+  background: linear-gradient(180deg, var(--brass-400), var(--brass-500));
+}
+
+.organizer__target--plain {
+  color: var(--text);
+  background: rgb(255 240 220 / 0.08);
+  box-shadow: inset 0 0 0 1px rgb(255 240 220 / 0.18);
+}
+
+.organizer__clear {
+  flex: none;
+  min-height: 44px;
+  padding: 0 12px;
+  font-size: 14px;
+  color: var(--text-dim);
+}
+
+@media (orientation: portrait) {
+  .organizer__into {
+    display: none;
+  }
+}

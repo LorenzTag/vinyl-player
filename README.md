@@ -75,15 +75,22 @@ Jeder `?mock=…`-Parameter startet die Demo, unabhängig von einer Anmeldung.
 
 ## Bedienung
 
-- **Tabs:** Playlists, Alben, Zuletzt gehört
-- **Umschalter oben rechts:** *Stapel* (Cover-Flow auf Filz) oder *Regal*
-  (Holzregal mit Papier-Etiketten). Die Wahl wird gespeichert.
-- **Stapel:** wischen, mit Schwung, die Hüllen rasten ein. Eine seitliche Hülle
-  antippen holt sie in die Mitte, die mittlere antippen öffnet sie.
+- **Plattenschrank:** Die Sammlung steht in Regal-Zeilen untereinander. In jeder
+  Zeile stehen die Platten schräg wie im echten Regal, auf dem Rücken jeder Hülle
+  stehen Titel und Ersteller. Wischen nach links/rechts blättert in der Zeile
+  (mit Schwung, die Hüllen rasten ein), nach oben/unten wechselt das Regal. Eine
+  seitliche Hülle antippen holt sie in die Mitte, die mittlere antippen öffnet sie,
+  eine angeschnittene Nachbar-Zeile antippen holt sie in den Blick.
   Am Mac gehen auch Pfeiltasten, Trackpad und Mausrad.
+- **Regale einrichten:** Beim ersten Start öffnet sich „Plattenschrank einrichten“
+  (später über den runden Knopf oben rechts). Regale anlegen, umbenennen,
+  umsortieren oder löschen; Platten antippen und unten das Ziel-Regal wählen.
+  Neue Platten landen in „Nicht einsortiert“, „Zuletzt gehört“ lässt sich als
+  oberste Zeile ein- oder ausschalten. Alles wird auf dem Gerät gespeichert.
 - **Plattenspieler:** Hintergrund, Vinyl und Etikett nehmen die Farben des Covers
   an. Etikett und Cover zeigen das aktuelle Lied, bei Playlists das jeweilige
-  Album-Cover. Alles geht mit Gesten, die Leiste unten ist optional:
+  Album-Cover. Er startet im Standby ohne Leiste – alles geht mit Gesten, ein
+  Tipp ins Leere blendet die Leiste ein:
 
   | Geste | Wirkung |
   |---|---|
@@ -100,7 +107,7 @@ Jeder `?mock=…`-Parameter startet die Demo, unabhängig von einer Anmeldung.
   gemischter Reihenfolge (aus der Warteschlange), darunter alle Titel.
 - **Mini-Player:** Läuft eine Platte, schwebt in der Sammlung unten ein
   Mini-Player mit Pause und Weiter. Ein Tipp darauf öffnet den Plattenspieler wieder.
-- **Zurück:** „Sammlung“-Button, Escape oder die Zurück-Geste des Browsers
+- **Zurück:** nach rechts wischen, „Sammlung“-Button, Escape oder die Zurück-Geste des Browsers
 
 ## Aufbau
 
@@ -128,12 +135,14 @@ src/
   state/                Zustand
     store.js            minimaler Store (set/subscribe)
     app-state.js        Form des Zustands, gemerkte Einstellungen
+    shelves.js          eigene Regale: speichern, Zeilen bilden, einsortieren
     library.js          Laden mit Abbruch, automatischen Wiederholungen, „wieder online"
     playback.js         Wiedergabe-Befehle (nacheinander), Titellisten-Cache, Fehler
   ui/                   Oberfläche (kennt nur Zustand und Domänen-Typen)
-    app.js              Kopfleiste, Ansichten, Öffnen/Schließen, History
-    crate-view.js       Stapel (Cover-Flow), eigene Wischgeste
-    shelf-view.js       Regal
+    app.js              Plattenschrank, Konto-Knopf, Öffnen/Schließen, History
+    cabinet-view.js     Plattenschrank: Regal-Zeilen, Wechsel nach oben/unten
+    crate-view.js       eine Regal-Zeile: 3D-Hüllen mit Rücken, eigene Wischgeste
+    organizer.js        „Plattenschrank einrichten“: Regale und Einsortieren
     record-player.js    Plattenspieler: Animation, Gesten, Leiste
     tonearm.js          Tonarm (Ziehen, Titelwahl, Fortschritt)
     tracklist.js        Titelliste als Beiblatt

@@ -1,31 +1,15 @@
-/* Vorschlag B: Plattenstapel (Cover-Flow) auf Filz.
-   Die Wischgeste steuert JS selbst (Pointer-Events + Schwung + Einrasten):
-   So bewegen sich alle Hüllen im selben Frame – kein Versatz gegenüber dem
-   nativen Scrollen, das auf iOS asynchron läuft. Animiert wird nur transform
-   und opacity. */
+/* Regal-Zeile: Cover-Flow mit dreidimensionalen Hüllen. Die seitlichen Hüllen
+   zeigen ihren Rücken (Titel + Ersteller). Die 3D-Lage jeder Hülle setzt JS per
+   transform; animiert wird nur transform und opacity. */
 
 .crate {
+  position: relative;
+  height: 100%;
   container-type: size;
   display: grid;
   grid-template-rows: minmax(0, 1fr) auto;
-  --size: min(50cqw, 60cqh, 480px);
-}
-
-@media (orientation: portrait) {
-  .crate {
-    --size: min(60cqw, 52cqh, 520px);
-  }
-}
-
-/* Lichtkegel und Vignette über dem Filz */
-.crate::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background:
-    radial-gradient(ellipse 60% 50% at 50% 42%, rgb(255 226 180 / 0.08), transparent 70%),
-    radial-gradient(ellipse 120% 90% at 50% 40%, transparent 55%, rgb(0 0 0 / 0.55));
+  --size: min(42cqw, calc(100cqh - 88px), 440px);
+  --spine: calc(var(--size) * 0.085);  /* Dicke des Hüllen-Rückens */
 }
 
 .crate__probe {
@@ -39,7 +23,6 @@
 .crate__stage {
   position: relative;
   grid-row: 1;
-  overflow: hidden;
   touch-action: none;           /* Geste gehört komplett uns */
   cursor: grab;
 }
@@ -48,6 +31,7 @@
   cursor: grabbing;
 }
 
+/* Eine Hülle: Vorderseite + Rücken links und rechts (echtes 3D) */
 .crate-item {
   position: absolute;
   top: 50%;
@@ -55,15 +39,23 @@
   width: var(--size);
   height: var(--size);
   margin: calc(var(--size) / -2) 0 0 calc(var(--size) / -2);
-  border-radius: 4px;
-  box-shadow: var(--shadow-sleeve);
+  transform-style: preserve-3d;
   transform-origin: 50% 50%;
-  backface-visibility: hidden;
-  -webkit-backface-visibility: hidden;
-  will-change: transform, opacity; /* eigene Ebene von Anfang an – kein Ruckler beim ersten Bewegen */
+  /* Eigene Ebene von Anfang an – kein Ruckler beim ersten Bewegen. Nur transform:
+     „will-change: opacity" würde das 3D flach drücken und die Rücken verstecken. */
+  will-change: transform;
 }
 
-.crate-item > .cover {
+.crate-item__face {
+  position: absolute;
+  inset: 0;
+  border-radius: 3px;
+  box-shadow: var(--shadow-sleeve);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+.crate-item__face > .cover {
   border-radius: inherit;
 }
 
@@ -77,11 +69,68 @@
   pointer-events: none;
 }
 
+.crate-item__spine {
+  position: absolute;
+  top: 0;
+  width: var(--spine);
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  color: var(--spine-ink, #2a2018);
+  background:
+    linear-gradient(90deg, rgb(0 0 0 / 0.22), transparent 28%, transparent 72%, rgb(0 0 0 / 0.28)),
+    linear-gradient(180deg, rgb(255 255 255 / 0.12), transparent 18%, transparent 82%, rgb(0 0 0 / 0.18)),
+    var(--spine-bg, #e9dfcc);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+/* rechter Rücken: klappt an der rechten Kante nach hinten */
+.crate-item__spine--right {
+  left: 100%;
+  transform-origin: 0 50%;
+  transform: rotateY(90deg);
+}
+
+/* linker Rücken: klappt an der linken Kante nach hinten */
+.crate-item__spine--left {
+  right: 100%;
+  transform-origin: 100% 50%;
+  transform: rotateY(-90deg);
+}
+
+/* Beschriftung: senkrecht, von unten nach oben gelesen (wie im Plattenregal) */
+.crate-item__spine-text {
+  display: block;
+  max-height: 92%;
+  overflow: hidden;
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: calc(var(--spine) * 0.42);
+  line-height: 1;
+}
+
+.crate-item__spine-text strong {
+  font-family: var(--font-serif);
+  font-weight: 700;
+}
+
+.crate-item__spine-text span {
+  margin-inline-start: 0.8em;   /* senkrechte Schrift: „inline" läuft entlang des Rückens */
+  font-size: 0.86em;
+  font-weight: 600;
+  opacity: 0.75;
+}
+
 .crate-item.is-opening {
   opacity: 0 !important;
 }
 
-/* Bildunterschrift zur mittleren Platte */
+/* Bildunterschrift zur mittleren Platte (nur in der Zeile im Blick) */
 .crate__caption {
   position: relative;
   grid-row: 2;
@@ -89,14 +138,11 @@
   flex-direction: column;
   align-items: center;
   gap: 2px;
-  min-height: 116px;
-  padding:
-    4px
-    calc(var(--safe-right) + var(--gutter) + 64px)
-    calc(var(--safe-bottom) + 22px)
-    calc(var(--safe-left) + var(--gutter) + 64px);
+  min-height: 74px;
+  padding: 4px 80px 10px;
   text-align: center;
   pointer-events: none;
+  transition: opacity 260ms linear;
 }
 
 .crate__title {
@@ -104,7 +150,7 @@
   margin: 0;
   overflow: hidden;
   font-family: var(--font-serif);
-  font-size: clamp(22px, 3.2cqw, 30px);
+  font-size: clamp(20px, 2.6cqw, 28px);
   font-weight: 600;
   line-height: 1.25;
   color: var(--paper-100);
@@ -115,29 +161,34 @@
 .crate__subtitle {
   max-width: 100%;
   overflow: hidden;
-  font-size: 17px;
+  font-size: 16px;
   color: var(--text-dim);
   white-space: nowrap;
   text-overflow: ellipsis;
 }
 
 .crate__meta {
-  margin-top: 6px;
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--brass-500);
+  display: none;
 }
 
-/* Position in der Sammlung, z. B. „3 / 12" */
+/* Position in der Zeile, z. B. „3 / 12" */
 .crate__count {
   position: absolute;
-  right: calc(var(--safe-right) + var(--gutter));
-  bottom: calc(var(--safe-bottom) + 24px);
+  right: 20px;
+  bottom: 14px;
   font-size: 13px;
   font-variant-numeric: tabular-nums;
   color: var(--text-faint);
+  transition: opacity 260ms linear;
+}
+
+.crate:not(.is-active) .crate__caption,
+.crate:not(.is-active) .crate__count {
+  opacity: 0;
+}
+
+.crate:not(.is-active) .crate__stage {
+  cursor: pointer;
 }
 
 @media (max-width: 700px) {

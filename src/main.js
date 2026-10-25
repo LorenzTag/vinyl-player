@@ -65,7 +65,7 @@ function startApp({ source, device, account, onLogin }) {
   const store = createAppStore();
   const library = createLibrary(store, source);
   const playback = createPlayback(store, source, device);
-  createApp(root, { store, library, playback, account: account.el, onLogin });
+  createApp(root, { store, library, playback, account, onLogin });
 
   // Nach „Spotify öffnen" zurück in der App: gescheiterten Befehl einmal wiederholen.
   document.addEventListener('visibilitychange', () => {
@@ -80,8 +80,7 @@ if (isDemo()) {
     account: createAccountButton({
       label: 'Demo',
       detail: 'Beispieldaten, ohne Spotify',
-      actionLabel: 'Demo beenden',
-      onAction: endDemo,
+      actions: [{ label: 'Demo beenden', onAction: endDemo, danger: true }],
     }),
   });
 } else {
@@ -101,8 +100,7 @@ if (isDemo()) {
     const account = createAccountButton({
       label: 'Spotify',
       detail: 'Angemeldet bei Spotify',
-      actionLabel: 'Abmelden',
-      onAction: () => auth.logout(),
+      actions: [{ label: 'Abmelden', onAction: () => auth.logout(), danger: true }],
     });
     // Abgemeldet (auch wenn Spotify das Token widerruft) → zurück zum Startbildschirm.
     auth.onLogout(() => window.location.replace(redirectUri()));

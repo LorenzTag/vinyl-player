@@ -129,16 +129,3 @@
   transform: scaleX(0);
   transition: transform 1s linear;
 }
-
-/* Platz schaffen, damit der Mini-Player nichts verdeckt */
-.app.has-mini .shelf__cabinet {
-  padding-bottom: calc(var(--safe-bottom) + 110px);
-}
-
-.app.has-mini .crate__caption {
-  padding-bottom: calc(var(--safe-bottom) + 96px);
-}
-
-.app.has-mini .crate__count {
-  bottom: calc(var(--safe-bottom) + 98px);
-}

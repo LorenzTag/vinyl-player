@@ -1,28 +1,47 @@
 // @ts-check
-// Konto-Knopf in der Kopfleiste: zeigt, wer angemeldet ist (bzw. Demo), und
-// bietet Abmelden / Demo beenden an.
+// Knopf in der Ecke: zeigt, wer angemeldet ist (bzw. Demo), und bietet die
+// Einträge „Plattenschrank einrichten" und Abmelden / Demo beenden.
 
 import { h } from './dom.js';
 
 /**
- * @param {{ label: string, detail: string, actionLabel: string, onAction: () => void }} options
+ * @typedef {{ label: string, onAction: () => void, danger?: boolean }} MenuAction
  */
-export function createAccountButton({ label, detail, actionLabel, onAction }) {
+
+/**
+ * @param {{ label: string, detail: string, actions: MenuAction[] }} options
+ */
+export function createAccountButton({ label, detail, actions }) {
   const initial = h('span', { class: 'account__initial', 'aria-hidden': 'true' }, (label.trim()[0] ?? '?').toUpperCase());
   const button = h('button', {
     type: 'button',
     class: 'account__button',
     'aria-haspopup': 'true',
     'aria-expanded': 'false',
-    'aria-label': `Konto: ${label}`,
+    'aria-label': `Menü – ${label}`,
   }, initial);
   const name = h('div', { class: 'account__name' }, label);
+  /** Einträge, die die App später hinzufügt (z. B. „Plattenschrank einrichten") */
+  const list = h('div', { class: 'account__actions' });
   const menu = h('div', { class: 'account__menu tex-paper', hidden: true, role: 'menu' },
     name,
     h('div', { class: 'account__detail' }, detail),
-    h('button', { type: 'button', class: 'account__action', role: 'menuitem', onclick: () => { close(); onAction(); } }, actionLabel),
+    list,
   );
   const el = h('div', { class: 'account' }, button, menu);
+
+  /** @type {MenuAction[]} */
+  let current = actions;
+
+  function renderActions() {
+    list.replaceChildren(...current.map((action) =>
+      h('button', {
+        type: 'button',
+        class: `account__action${action.danger ? ' account__action--quiet' : ''}`,
+        role: 'menuitem',
+        onclick: () => { close(); action.onAction(); },
+      }, action.label)));
+  }
 
   function close() {
     menu.hidden = true;
@@ -40,6 +59,7 @@ export function createAccountButton({ label, detail, actionLabel, onAction }) {
   el.addEventListener('keydown', (event) => {
     if (event.key === 'Escape') close();
   });
+  renderActions();
 
   return {
     el,
@@ -47,7 +67,14 @@ export function createAccountButton({ label, detail, actionLabel, onAction }) {
     setLabel(/** @type {string} */ text) {
       name.textContent = text;
       initial.textContent = (text.trim()[0] ?? '?').toUpperCase();
-      button.setAttribute('aria-label', `Konto: ${text}`);
+      button.setAttribute('aria-label', `Menü – ${text}`);
+    },
+    /** Einträge vorn ergänzen */
+    prependActions(/** @type {MenuAction[]} */ extra) {
+      current = [...extra, ...current];
+      renderActions();
     },
   };
 }
+
+/** @typedef {ReturnType<typeof createAccountButton>} AccountButton */

@@ -4,14 +4,6 @@
 import { h } from './dom.js';
 
 /** @typedef {import('../state/app-state.js').Resource} Resource */
-/** @typedef {import('../state/app-state.js').TabId} TabId */
-
-/** @type {Record<TabId, string>} */
-const EMPTY_TEXT = {
-  playlists: 'Noch keine Playlists in deiner Sammlung.',
-  albums: 'Noch keine gespeicherten Alben.',
-  recent: 'Noch nichts gehört – leg eine Platte auf!',
-};
 
 /**
  * @param {{ onRetry: () => void, onLogin?: () => void }} handlers
@@ -24,13 +16,13 @@ export function createStatus({ onRetry, onLogin }) {
 
   /**
    * @param {Resource} resource
-   * @param {TabId} tab
+   * @param {string} emptyText  Hinweis, wenn nichts da ist
    */
-  function show(resource, tab) {
+  function show(resource, emptyText) {
     const empty = resource.status === 'ready' && resource.items.length === 0;
     const key = resource.status === 'error'
       ? `error:${resource.error?.message}`
-      : empty ? `empty:${tab}` : resource.status === 'loading' && resource.items.length === 0 ? 'loading' : '';
+      : empty ? `empty:${emptyText}` : resource.status === 'loading' && resource.items.length === 0 ? 'loading' : '';
     if (key === shown) return;
     shown = key;
 
@@ -58,7 +50,7 @@ export function createStatus({ onRetry, onLogin }) {
       el.dataset.state = 'empty';
       el.append(
         h('h2', { class: 'status__title' }, 'Hier ist noch Platz'),
-        h('p', { class: 'status__text' }, EMPTY_TEXT[tab]),
+        h('p', { class: 'status__text' }, emptyText),
       );
     }
   }

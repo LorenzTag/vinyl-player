@@ -2,13 +2,15 @@
 // Form des App-Zustands, Startwerte und gemerkte Einstellungen (localStorage).
 
 import { createStore } from './store.js';
+import { loadShelfConfig, saveShelfConfig } from './shelves.js';
 
 /** @typedef {import('../data/types.js').RecordItem} RecordItem */
 /** @typedef {import('../data/types.js').Track} Track */
 /** @typedef {import('../data/errors.js').SourceError} SourceError */
 
+/** Teile der Bibliothek, die geladen werden */
 /** @typedef {'playlists' | 'albums' | 'recent'} TabId */
-/** @typedef {'shelf' | 'crate'} LayoutId */
+/** @typedef {import('./shelves.js').ShelfConfig} ShelfConfig */
 
 /**
  * Was eine Ansicht darstellt: die Platte plus optional, wann sie gehört wurde.
@@ -27,9 +29,9 @@ import { createStore } from './store.js';
 
 /**
  * @typedef {Object} AppState
- * @property {TabId} tab
- * @property {LayoutId} layout
  * @property {Record<TabId, Resource>} library
+ * @property {ShelfConfig | null} shelfConfig   eigene Regale (null = noch nie eingerichtet)
+ * @property {string | null} focusRow         Regal-Zeile im Blick (wird gemerkt)
  * @property {RecordItem | null} openRecord   Platte, die gerade im Plattenspieler-Bildschirm liegt
  * @property {Playback} playback              was das Abspielgerät gerade spielt
  * @property {Record<string, TrackList>} tracklists  Titellisten je Platten-ID (Cache)
@@ -64,8 +66,6 @@ import { createStore } from './store.js';
 
 /** @type {TabId[]} */
 export const TABS = ['playlists', 'albums', 'recent'];
-/** @type {LayoutId[]} */
-export const LAYOUTS = ['shelf', 'crate'];
 
 const PREFS_KEY = 'vinyl-player:prefs:v1';
 
@@ -74,20 +74,17 @@ function emptyResource() {
   return { status: 'idle', items: [], error: null };
 }
 
-/** @returns {{ tab?: TabId, layout?: LayoutId }} */
+/** @returns {{ focusRow?: string }} */
 function loadPrefs() {
   try {
     const raw = JSON.parse(localStorage.getItem(PREFS_KEY) ?? '{}');
-    return {
-      tab: TABS.includes(raw.tab) ? raw.tab : undefined,
-      layout: LAYOUTS.includes(raw.layout) ? raw.layout : undefined,
-    };
+    return { focusRow: typeof raw.focusRow === 'string' ? raw.focusRow : undefined };
   } catch {
     return {};
   }
 }
 
-/** @param {{ tab: TabId, layout: LayoutId }} prefs */
+/** @param {{ focusRow: string | null }} prefs */
 function savePrefs(prefs) {
   try {
     localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
@@ -101,8 +98,6 @@ export function createAppStore() {
 
   /** @type {AppState} */
   const initial = {
-    tab: prefs.tab ?? 'playlists',
-    layout: prefs.layout ?? 'crate',
     library: { playlists: emptyResource(), albums: emptyResource(), recent: emptyResource() },
     openRecord: null,
     playback: {
@@ -121,11 +116,14 @@ export function createAppStore() {
       queueFor: null,
     },
     tracklists: {},
+    shelfConfig: loadShelfConfig(),
+    focusRow: prefs.focusRow ?? null,
   };
 
   const store = createStore(initial);
   store.subscribe((s, prev) => {
-    if (s.tab !== prev.tab || s.layout !== prev.layout) savePrefs({ tab: s.tab, layout: s.layout });
+    if (s.focusRow !== prev.focusRow) savePrefs({ focusRow: s.focusRow });
+    if (s.shelfConfig !== prev.shelfConfig && s.shelfConfig) saveShelfConfig(s.shelfConfig);
   });
   return store;
 }
