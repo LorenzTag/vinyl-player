@@ -39,6 +39,7 @@ const SWIPE_DISTANCE = 60;     // px für Liedwechsel / Titelliste
 const FLICK_SPEED = 0.5;       // px/ms – kurzer, schneller Wisch zählt auch
 const PUTAWAY_FRACTION = 0.38; // so weit muss die Platte aufs Cover gezogen werden
 const LIST_GAP = 24;           // Abstand der Titelliste zum Rand
+const ERROR_VISIBLE_MS = 8000; // so lange steht ein Fehler in der Leiste
 
 const ICONS = {
   play: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l10.5-6.5z" fill="currentColor"/></svg>',
@@ -213,6 +214,7 @@ export function createRecordPlayer({ store, playback, onRequestClose }) {
   /** zuletzt angezeigter Fehler (jeden nur einmal melden) */
   /** @type {unknown} */
   let shownError = null;
+  let errorShownAt = 0;
 
   /** Was gerade dargestellt wird – für Ticker und Gesten */
   let view = {
@@ -319,7 +321,7 @@ export function createRecordPlayer({ store, playback, onRequestClose }) {
     );
 
     const tracklist = createTracklist({
-      onSelect: (index) => selectFromList(index),
+      onSelect: (target) => selectFromList(target),
       onClose: () => setList(false),
     });
     const toast = h('div', { class: 'player__toast', role: 'status', 'aria-live': 'polite' });
@@ -426,12 +428,7 @@ export function createRecordPlayer({ store, playback, onRequestClose }) {
     const old = parts.coverCard;
     const dir = reduced ? 0 : direction;
 
-    if (dir) {
-      animate(old, {
-        transform: [old.style.transform || 'none', `translateY(${-dir * 78}%) rotate(${-dir * 4}deg) scale(0.86)`],
-        opacity: [1, 0],
-      }, { duration: 340, easing: 'cubic-bezier(0.5, 0, 0.75, 0)', fill: 'forwards' });
-    }
+    if (dir && !old.dataset.gone) flyOut(old, dir);
 
     const [, theme] = await Promise.all([
       display.cover.imageUrl ? within(loadImage(display.cover.imageUrl), 2500) : null,
@@ -457,10 +454,50 @@ export function createRecordPlayer({ store, playback, onRequestClose }) {
       }, { duration: 560, easing: 'cubic-bezier(0.18, 0.9, 0.3, 1.08)' }));
     } else {
       animations.push(animate(card, { transform: ['scale(1.05)', 'none'], opacity: [0, 1] }, { duration: 700, easing: EASE_OUT }));
-      for (const c of stale) animations.push(animate(c, { opacity: [1, 0] }, { duration: 700, easing: 'ease-in-out', fill: 'forwards' }));
+      // Nur sichtbare alte Cover ausblenden – weggeflogene bleiben unsichtbar.
+      for (const c of stale) {
+        if (!c.dataset.gone) animations.push(animate(c, { opacity: [1, 0] }, { duration: 700, easing: 'ease-in-out', fill: 'forwards' }));
+      }
     }
     await settle(animations);
     stale.forEach((c) => c.remove());
+  }
+
+  /**
+   * Cover in Wischrichtung wegfliegen lassen (bleibt unsichtbar, bis es entfernt wird).
+   * @param {HTMLElement} card
+   * @param {number} dir
+   */
+  function flyOut(card, dir) {
+    card.dataset.gone = '1';
+    animate(card, {
+      transform: [card.style.transform || 'none', `translateY(${-dir * 78}%) rotate(${-dir * 4}deg) scale(0.86)`],
+      opacity: [1, 0],
+    }, { duration: 340, easing: 'cubic-bezier(0.5, 0, 0.75, 0)', fill: 'forwards' });
+  }
+
+  /**
+   * Das nächste Lied ist noch unbekannt (Shuffle, fremde Playlist, Ende der
+   * Playlist): altes Cover trotzdem sofort wegfliegen lassen. Das neue kommt,
+   * sobald Spotify den Wechsel meldet – bleibt die Meldung aus, kehrt das alte
+   * zurück.
+   * @param {number} dir
+   */
+  function launchCover(dir) {
+    if (!current || prefersReducedMotion()) return;
+    const parts = current;
+    const card = parts.coverCard;
+    if (card.dataset.gone) return;
+    flyOut(card, dir);
+    const key = parts.coverKey;
+    setTimeout(() => {
+      if (current !== parts || parts.coverCard !== card || parts.coverKey !== key || !card.isConnected) return;
+      // Kein Wechsel gekommen: Cover zurückholen.
+      for (const a of card.getAnimations()) a.cancel();
+      delete card.dataset.gone;
+      card.style.transform = '';
+      animate(card, { transform: [`translateY(${-dir * 30}%) scale(0.92)`, 'none'], opacity: [0, 1] }, { duration: 420, easing: EASE_OUT });
+    }, 4500);
   }
 
   /**
@@ -531,10 +568,19 @@ export function createRecordPlayer({ store, playback, onRequestClose }) {
       showLabel(current, displayFor(record, null));
     }
 
+    if (pb.error && pb.error !== shownError) {
+      shownError = pb.error;
+      errorShownAt = Date.now();
+      showToast(pb.error.message);
+      current.player.classList.remove('is-standby'); // Fehler nie verstecken
+    }
+    // Fehler stehen nur kurz in der Leiste – danach wieder der normale Status.
+    const recentError = pb.error && Date.now() - errorShownAt < ERROR_VISIBLE_MS ? pb.error : null;
+
     // Leiste (nur das Nötigste – Titel steht auf der Platte)
     const where = pb.deviceName ?? '';
-    current.status.textContent = pb.error
-      ? pb.error.message
+    current.status.textContent = recentError
+      ? recentError.message
       : isCurrent
         ? [playing ? '' : 'Pausiert', index >= 0 ? `${index + 1} / ${tracks.length}` : '', where].filter(Boolean).join(' · ')
         : pb.context
@@ -549,16 +595,13 @@ export function createRecordPlayer({ store, playback, onRequestClose }) {
       recordTitle: record.title,
       tracks,
       current: index,
+      nowPlaying: isCurrent ? track : null,
       playing,
+      shuffle: isCurrent && pb.shuffle,
+      queue: isCurrent && pb.queueFor === (pb.track?.uri ?? null) ? pb.queue : [],
       status: isCurrent && tracks.length ? 'ready' : list?.status ?? 'loading',
       error: list?.error?.message,
     });
-
-    if (pb.error && pb.error !== shownError) {
-      shownError = pb.error;
-      showToast(pb.error.message);
-      current.player.classList.remove('is-standby'); // Fehler nie verstecken
-    }
     tick();
   }
 
@@ -623,8 +666,12 @@ export function createRecordPlayer({ store, playback, onRequestClose }) {
     if (!current) return;
     intent = { direction, until: Date.now() + 4000 };
     if (view.isCurrent) {
+      const coverBefore = current.coverKey;
+      const labelBefore = current.labelKey;
       if (direction > 0) playback.next();
       else playback.previous();
+      // Kein sofortiger Wechsel (Ziel unbekannt)? Dann trotzdem gleich reagieren.
+      if (current && current.coverKey === coverBefore && current.labelKey === labelBefore) launchCover(direction);
       return;
     }
     const { tracks } = view;
@@ -656,10 +703,24 @@ export function createRecordPlayer({ store, playback, onRequestClose }) {
     animate(card, { transform: [from, `translateY(${-direction * 7}%)`, 'none'] }, { duration: 380, easing: EASE_OUT });
   }
 
-  /** @param {number} index */
-  function selectFromList(index) {
+  /**
+   * Titel aus der Liste gewählt – aus „Alle Titel" (Index) oder aus der
+   * Shuffle-Warteschlange (URI).
+   * @param {{ index: number } | { uri: string }} target
+   */
+  function selectFromList(target) {
     if (!current) return;
     const { record } = current.item;
+    const tracks = view.tracks.length ? view.tracks : store.get().tracklists[record.id]?.items ?? [];
+    const index = 'index' in target ? target.index : tracks.findIndex((t) => t.uri === target.uri);
+    if (index < 0) {
+      showToast('Dieser Titel ist nicht auf dieser Platte – er kommt von Spotify als Nächstes.');
+      return;
+    }
+    if (view.isCurrent && tracks[index]?.uri === view.track?.uri) {
+      setList(false); // läuft schon
+      return;
+    }
     intent = { direction: index >= view.index ? 1 : -1, until: Date.now() + 4000 };
     browsing = true;
     selectedIndex = index;
@@ -675,8 +736,11 @@ export function createRecordPlayer({ store, playback, onRequestClose }) {
     const listWidth = current.tracklist.el.offsetWidth || window.innerWidth;
     const portrait = window.innerHeight > window.innerWidth;
     // Querformat: Cover verschwindet links, der Plattenteller bleibt neben der Liste.
-    const platter = current.platter.getBoundingClientRect();
-    const deckShift = portrait ? window.innerWidth : Math.max(0, platter.left - LIST_GAP);
+    // Gemessen wird die Lage OHNE die laufende Verschiebung (offsetLeft ignoriert
+    // transform) – sonst schaukelt sich die Bewegung beim Ziehen auf.
+    const playerLeft = current.player.getBoundingClientRect().left;
+    const platterLeft = playerLeft + current.deck.offsetLeft + current.platter.offsetLeft;
+    const deckShift = portrait ? window.innerWidth : Math.max(0, platterLeft - LIST_GAP);
     return { deckShift, listShift: listWidth + LIST_GAP * 2 };
   }
 
@@ -699,7 +763,10 @@ export function createRecordPlayer({ store, playback, onRequestClose }) {
     placeList(open ? 1 : 0, true);
     current.tracklist.setOpen(open);
     current.player.classList.toggle('is-list', open);
-    if (open) current.tracklist.revealCurrent();
+    if (open) {
+      current.tracklist.revealCurrent();
+      if (playback.isContext(current.item.record)) playback.refreshQueue();
+    }
   }
 
   // Beim Drehen des iPad die Lage der Liste neu berechnen.
@@ -848,7 +915,7 @@ export function createRecordPlayer({ store, playback, onRequestClose }) {
       // Wechsel auslösen, solange die Karte noch am Finger hängt – das alte
       // Cover fliegt dann direkt von dort weiter.
       if (!cancelled && (up || down)) changeSong(up ? 1 : -1);
-      if (current && current.coverCard === card && current.coverKey === keyBefore && card.style.transform) {
+      if (current && current.coverCard === card && current.coverKey === keyBefore && !card.dataset.gone && card.style.transform) {
         // Kein (sofortiger) Cover-Wechsel: Karte zurückfedern lassen.
         const from = card.style.transform;
         card.style.transform = '';

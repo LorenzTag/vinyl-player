@@ -69,6 +69,7 @@ Fehlerfälle lassen sich per URL-Parameter simulieren:
 | `?mock=flaky` | erster Versuch scheitert, die automatische Wiederholung klappt    |
 | `?mock=empty` | leere Bibliothek                                                  |
 | `?mock=nodevice` | Abspielen scheitert mit „kein aktives Gerät" (Tonarm geht zurück) |
+| `?mock=shuffle` | Zufallswiedergabe: gemischte Reihenfolge, Titelliste mit „Als Nächstes" |
 
 Jeder `?mock=…`-Parameter startet die Demo, unabhängig von einer Anmeldung.
 
@@ -95,6 +96,8 @@ Jeder `?mock=…`-Parameter startet die Demo, unabhängig von einer Anmeldung.
 
   Die Leiste bietet dasselbe noch einmal als Knöpfe: Sammlung, ⏮ ▶/❚❚ ⏭ und
   Titelliste. Befehle wirken sofort auf Arm und Platte, Spotify zieht kurz danach nach.
+  Bei Zufallswiedergabe zeigt die Titelliste zuerst „Als Nächstes“ in Spotifys
+  gemischter Reihenfolge (aus der Warteschlange), darunter alle Titel.
 - **Mini-Player:** Läuft eine Platte, schwebt in der Sammlung unten ein
   Mini-Player mit Pause und Weiter. Ein Tipp darauf öffnet den Plattenspieler wieder.
 - **Zurück:** „Sammlung“-Button, Escape oder die Zurück-Geste des Browsers

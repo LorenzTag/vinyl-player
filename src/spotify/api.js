@@ -157,8 +157,16 @@ export function createApi(auth) {
 
       if (!response.ok) throw await toError(response, path);
       if (response.status === 204) return null;
-      const text = await response.text();
-      return text ? JSON.parse(text) : null;
+      const text = await response.text().catch(() => '');
+      if (!text.trim()) return null;
+      try {
+        return JSON.parse(text);
+      } catch (err) {
+        // Spotify beantwortet Befehle (Weiter, Zurück, Pause …) teils mit 200 und
+        // einem Text, der kein JSON ist. Der Befehl hat trotzdem geklappt.
+        if (!isRead) return null;
+        throw new SourceError('unknown', { message: 'Spotify hat unerwartet geantwortet.', cause: err });
+      }
     }
   }
 

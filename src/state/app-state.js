@@ -57,6 +57,9 @@ import { createStore } from './store.js';
  * @property {boolean} pending             ein Befehl ist unterwegs
  * @property {SourceError | null} error    letzter fehlgeschlagener Befehl
  * @property {string | null} deviceName    Gerät, auf dem gespielt wird
+ * @property {boolean} shuffle             Zufallswiedergabe an?
+ * @property {Track[]} queue               als Nächstes (echte Reihenfolge, auch bei Shuffle)
+ * @property {string | null} queueFor      Titel-URI, zu dem `queue` gehört (sonst veraltet)
  */
 
 /** @type {TabId[]} */
@@ -113,6 +116,9 @@ export function createAppStore() {
       pending: false,
       error: null,
       deviceName: null,
+      shuffle: false,
+      queue: [],
+      queueFor: null,
     },
     tracklists: {},
   };

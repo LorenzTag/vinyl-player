@@ -127,6 +127,7 @@ export function createPlayback(store, source, device) {
       if (!record) resolveContext(snapshot.contextUri);
       else if (!tracks.length) adoptTracks(record);
     }
+    const before = store.get().playback;
     setPlayback({
       context,
       tracks,
@@ -136,7 +137,39 @@ export function createPlayback(store, source, device) {
       positionMs: snapshot.positionMs,
       at: snapshot.at,
       deviceName: snapshot.deviceName,
+      shuffle: snapshot.shuffle,
     });
+    // Neues Lied oder Shuffle umgeschaltet: Warteschlange nachladen.
+    if (context && (snapshot.track?.uri !== before.queueFor || snapshot.shuffle !== before.shuffle)) refreshQueue();
+  }
+
+  /** @type {Promise<void> | null} */
+  let queueLoading = null;
+  let queueAgain = false;
+
+  /**
+   * Was als Nächstes kommt – in Spotifys echter Reihenfolge (bei Shuffle gemischt).
+   * Nie mehrere Abfragen gleichzeitig; Fehler sind hier unkritisch.
+   */
+  function refreshQueue() {
+    if (queueLoading) {
+      queueAgain = true;
+      return queueLoading;
+    }
+    const forUri = store.get().playback.track?.uri ?? null;
+    queueLoading = device.getQueue()
+      .then((queue) => {
+        // Inzwischen anderes Lied? Dann gehört die Antwort nicht mehr dazu.
+        if (store.get().playback.track?.uri === forUri) setPlayback({ queue, queueFor: forUri });
+      }, () => {})
+      .finally(() => {
+        queueLoading = null;
+        if (queueAgain) {
+          queueAgain = false;
+          refreshQueue();
+        }
+      });
+    return queueLoading;
   }
 
   /** Unbekannte Platte per URI holen und, falls sie noch läuft, übernehmen. */
@@ -334,20 +367,36 @@ export function createPlayback(store, source, device) {
     },
 
     next() {
-      const { tracks, index } = store.get().playback;
-      const target = index >= 0 ? tracks[index + 1] : undefined;
+      const { tracks, index, shuffle, queue, queueFor, track } = store.get().playback;
+      // Bei Shuffle (und generell, wenn bekannt) sagt Spotifys Warteschlange, was kommt.
+      const queueFresh = queueFor !== null && queueFor === (track?.uri ?? null);
+      const target = queueFresh && queue[0] ? queue[0] : shuffle ? undefined : index >= 0 ? tracks[index + 1] : undefined;
       if (!target) return run(() => device.next());
-      return optimistic({ index: index + 1, track: target, positionMs: 0, at: Date.now() }, { trackUri: target.uri }, () => device.next());
+      const targetIndex = tracks.findIndex((t) => t.uri === target.uri);
+      return optimistic(
+        { index: targetIndex, track: target, positionMs: 0, at: Date.now(), queue: queueFresh ? queue.slice(1) : queue, queueFor: target.uri },
+        { trackUri: target.uri },
+        () => device.next(),
+      ).then((ok) => {
+        // Spotify ergänzt die Warteschlange nach dem Sprung – kurz danach neu laden.
+        if (ok) setTimeout(refreshQueue, 900);
+        return ok;
+      });
     },
 
     previous() {
-      const { tracks, index } = store.get().playback;
+      const { tracks, index, shuffle } = store.get().playback;
       if (currentPosition() > RESTART_AFTER_MS || index <= 0) {
         return optimistic({ positionMs: 0, at: Date.now() }, null, () => device.previous());
       }
+      // Bei Shuffle springt Spotify im Verlauf zurück – das Ziel ist unbekannt.
+      if (shuffle) return run(() => device.previous());
       const target = tracks[index - 1];
       return optimistic({ index: index - 1, track: target, positionMs: 0, at: Date.now() }, { trackUri: target.uri }, () => device.previous());
     },
+
+    /** Warteschlange neu laden (z. B. beim Öffnen der Titelliste). */
+    refreshQueue,
 
     /** Platte einpacken: Wiedergabe beenden. */
     stop() {

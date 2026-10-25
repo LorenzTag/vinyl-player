@@ -72,6 +72,7 @@
  * @property {number} positionMs         Position im Titel zum Zeitpunkt `at`
  * @property {number} at                 Date.now() der Messung (zum Hochrechnen)
  * @property {string | null} deviceName  Gerät, auf dem gerade gespielt wird
+ * @property {boolean} shuffle           Zufallswiedergabe an?
  */
 
 /**
@@ -86,6 +87,8 @@
  * @property {() => Promise<void>} next
  * @property {() => Promise<void>} previous
  * @property {() => Promise<void>} stop       Wiedergabe beenden, Platte „einpacken"
+ * @property {() => Promise<Track[]>} getQueue  was als Nächstes kommt – in der echten
+ *           Reihenfolge (bei Zufallswiedergabe also gemischt)
  * @property {(fn: (snapshot: PlaybackSnapshot) => void) => () => void} subscribe
  */
 

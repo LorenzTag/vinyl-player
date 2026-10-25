@@ -27,7 +27,7 @@ const CONFIRM_DELAYS_MS = [400, 1500, 3200]; // Spotify übernimmt Befehle mit k
  */
 export function createSpotifyDevice(api) {
   /** @type {PlaybackSnapshot} */
-  let state = { contextUri: null, index: -1, track: null, playing: false, positionMs: 0, at: Date.now(), deviceName: null };
+  let state = { contextUri: null, index: -1, track: null, playing: false, positionMs: 0, at: Date.now(), deviceName: null, shuffle: false };
   /** @type {Set<(s: PlaybackSnapshot) => void>} */
   const listeners = new Set();
   /** Platte, die „eingepackt" wurde – bleibt ausgeblendet, solange sie pausiert ist */
@@ -55,7 +55,7 @@ export function createSpotifyDevice(api) {
 
   /** Antwort von GET /me/player → Snapshot */
   function toSnapshot(body) {
-    if (!body) return { contextUri: null, index: -1, track: null, playing: false, positionMs: 0, at: Date.now(), deviceName: null };
+    if (!body) return { contextUri: null, index: -1, track: null, playing: false, positionMs: 0, at: Date.now(), deviceName: null, shuffle: false };
     const playing = !!body.is_playing;
     let contextUri = body.context?.uri ?? null;
     if (playing) stoppedContext = null;
@@ -69,6 +69,7 @@ export function createSpotifyDevice(api) {
       positionMs: body.progress_ms ?? 0,
       at: Date.now(),
       deviceName: body.device?.name ?? null,
+      shuffle: !!(body.shuffle_state || body.smart_shuffle),
     };
   }
 
@@ -198,6 +199,11 @@ export function createSpotifyDevice(api) {
       }
       stoppedContext = context;
       emit({ ...state, contextUri: null, playing: false, at: Date.now() });
+    },
+
+    async getQueue() {
+      const body = await api.request('GET', '/me/player/queue');
+      return (body?.queue ?? []).map(mapTrack).filter((t) => t !== null);
     },
 
     subscribe(fn) {

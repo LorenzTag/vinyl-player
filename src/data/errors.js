@@ -53,7 +53,10 @@ export function toSourceError(err) {
     // fetch() wirft TypeError bei Netzwerkfehlern.
     return new SourceError('network', { cause: err });
   }
-  return new SourceError('unknown', { cause: err });
+  // Unerwartete Fehler mit Namen melden – hilft beim Nachvollziehen auf dem iPad.
+  const name = err instanceof Error ? err.name : typeof err;
+  console.error('[unerwarteter Fehler]', err);
+  return new SourceError('unknown', { message: `Da ist etwas schiefgegangen (${name}).`, cause: err });
 }
 
 /**

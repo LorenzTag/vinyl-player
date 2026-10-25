@@ -4,6 +4,7 @@
 // Titel, Position, Pause und springt am Titelende weiter.
 //
 //   ?mock=nodevice   jeder Abspielbefehl scheitert mit „kein aktives Gerät"
+//   ?mock=shuffle    Zufallswiedergabe: gemischte Reihenfolge samt Warteschlange
 
 import { SourceError } from '../data/errors.js';
 
@@ -20,9 +21,28 @@ const RESTART_AFTER_MS = 3000; // „Zurück" nach 3 s: Titel neu starten statt 
  */
 export function createMockDevice(mode = '') {
   /** @type {PlaybackSnapshot} */
-  let state = { contextUri: null, index: 0, track: null, playing: false, positionMs: 0, at: Date.now(), deviceName: 'Demo-Plattenspieler' };
+  const shuffle = mode === 'shuffle';
+  let state = { contextUri: null, index: 0, track: null, playing: false, positionMs: 0, at: Date.now(), deviceName: 'Demo-Plattenspieler', shuffle };
   /** @type {Track[]} */
   let tracks = [];
+  /** Abspielreihenfolge (Titel-Indizes) – bei Shuffle gemischt */
+  /** @type {number[]} */
+  let order = [];
+
+  /** Reihenfolge ab einem Starttitel festlegen (bei Shuffle: Rest mischen). */
+  function makeOrder(/** @type {number} */ start) {
+    const rest = tracks.map((_, i) => i).filter((i) => i !== start);
+    if (shuffle) {
+      for (let i = rest.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [rest[i], rest[j]] = [rest[j], rest[i]];
+      }
+      order = [start, ...rest];
+    } else {
+      order = tracks.map((_, i) => i);
+    }
+  }
+  const cursor = () => order.indexOf(state.index);
   let endTimer = 0;
   /** @type {Set<(s: PlaybackSnapshot) => void>} */
   const listeners = new Set();
@@ -54,8 +74,9 @@ export function createMockDevice(mode = '') {
   }
 
   function onTrackEnd() {
-    if (state.index + 1 < tracks.length) {
-      set({ index: state.index + 1, positionMs: 0 });
+    const next = order[cursor() + 1];
+    if (next !== undefined) {
+      set({ index: next, positionMs: 0 });
     } else {
       // Ende der Platte: Nadel läuft aus, Wiedergabe stoppt am Anfang.
       set({ index: 0, positionMs: 0, playing: false });
@@ -71,7 +92,9 @@ export function createMockDevice(mode = '') {
       await delay();
       if (mode === 'nodevice') throw new SourceError('no-device');
       tracks = list;
-      set({ contextUri, index: Math.max(0, Math.min(index, list.length - 1)), positionMs, playing: true });
+      const start = Math.max(0, Math.min(index, list.length - 1));
+      makeOrder(start);
+      set({ contextUri, index: start, positionMs, playing: true });
     },
 
     async pause() {
@@ -90,21 +113,29 @@ export function createMockDevice(mode = '') {
     async next() {
       await delay();
       requireContext();
-      if (state.index + 1 < tracks.length) set({ index: state.index + 1, positionMs: 0 });
-      else set({ index: 0, positionMs: 0, playing: false });
+      const next = order[cursor() + 1];
+      if (next !== undefined) set({ index: next, positionMs: 0 });
+      else set({ index: order[0] ?? 0, positionMs: 0, playing: false });
     },
 
     async previous() {
       await delay();
       requireContext();
-      if (position() > RESTART_AFTER_MS || state.index === 0) set({ positionMs: 0 });
-      else set({ index: state.index - 1, positionMs: 0 });
+      const previous = order[cursor() - 1];
+      if (position() > RESTART_AFTER_MS || previous === undefined) set({ positionMs: 0 });
+      else set({ index: previous, positionMs: 0 });
     },
 
     async stop() {
       await delay();
       tracks = [];
       set({ contextUri: null, index: 0, positionMs: 0, playing: false });
+    },
+
+    async getQueue() {
+      await delay();
+      if (!state.contextUri) return [];
+      return order.slice(cursor() + 1, cursor() + 21).map((i) => tracks[i]);
     },
 
     subscribe(fn) {
